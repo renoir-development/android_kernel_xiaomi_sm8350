@@ -69,4 +69,5 @@ obj-$(CONFIG_HISI_HIKEY_USB)	+= hisi_hikey_usb.o
 obj-$(CONFIG_MI_HARDWARE_ID)	+= hwid.o
 obj-y                           += perf_helper.o
 obj-$(CONFIG_GPIO_TESTING_MODE)	+= gpio-testing-mode.o
+obj-$(CONFIG_FPR_FPC)		+= fpr_FingerprintCard/
 
