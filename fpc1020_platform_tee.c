@@ -141,6 +141,11 @@ found:
  * This is disabled in platform variant of this driver but kept for
  * backwards compatibility. Only prints a debug print that it is
  * disabled.
+ *
+ * @dev: fp device structure
+ * @attr: device attribute
+ * @buf: buffer that being passed to this driver
+ * @count: count
  */
 static ssize_t clk_enable_set(struct device *dev,
 	struct device_attribute *attr,
@@ -236,6 +241,8 @@ static DEVICE_ATTR(hw_reset, 0200, NULL, hw_reset_set);
  * enable/disable regulators, and reset line, all to set the sensor in a
  * correct power on or off state "electrical" wise.
  *
+ * @fpc1020: Data structure of fpc1020 driver
+ * @enable: Enable/disable regulators
  * @see  device_prepare_set
  * @note This function will not send any commands to the sensor it will only
  *       control it "electrically".
@@ -294,6 +301,10 @@ exit:
  * sysfs node to enable/disable (power up/power down) the touch sensor
  *
  * @see device_prepare
+ * @dev: fp device structure
+ * @attr: device attribute
+ * @buf: buffer that being passed to this driver
+ * @count: count
  */
 static ssize_t device_prepare_set(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
@@ -315,7 +326,13 @@ static DEVICE_ATTR(device_prepare, 0200, NULL, device_prepare_set);
 /**
  * sysfs node for controlling whether the driver is allowed
  * to wake up the platform on interrupt.
+ *
+ * @dev: fp device structure
+ * @attr: device attribute
+ * @buf: buffer that being passed to this driver
+ * @count: count
  */
+
 static ssize_t wakeup_enable_set(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -338,7 +355,12 @@ static DEVICE_ATTR(wakeup_enable, 0200, NULL, wakeup_enable_set);
 /**
  * sysf node to check the interrupt status of the sensor, the interrupt
  * handler should perform sysf_notify to allow userland to poll the node.
+ *
+ * @dev: fp device structure
+ * @attr: device attribute
+ * @buf: buffer that being passed to this driver
  */
+
 static ssize_t irq_get(struct device *dev,
 	struct device_attribute *attr,
 	char *buf)
@@ -352,7 +374,13 @@ static ssize_t irq_get(struct device *dev,
 /**
  * writing to the irq node will just drop a printk message
  * and return success, used for latency measurement.
+ *
+ * @dev: fp device structure
+ * @attr: device attribute
+ * @buf: buffer that being passed to this driver
+ * @count: count
  */
+
 static ssize_t irq_ack(struct device *dev,
 	struct device_attribute *attr,
 	const char *buf, size_t count)
