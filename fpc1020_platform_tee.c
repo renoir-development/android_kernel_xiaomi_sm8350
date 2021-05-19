@@ -48,6 +48,8 @@
 
 #define NUM_PARAMS_REG_ENABLE_SET 2
 
+const char *rst_gpio_power_down_state = "rst,power_down";
+
 struct vreg_config {
 	char *name;
 	unsigned long vmin;
@@ -72,6 +74,8 @@ struct fpc1020_data {
 	struct mutex lock; /* To set/get exported values in sysfs */
 	bool prepared;
 	atomic_t wakeup_enabled; /* Used both in ISR and non-ISR */
+	struct pinctrl *rst_pinctrl;
+	struct pinctrl_state *rst_state;
 };
 
 static int vreg_setup(struct fpc1020_data *fpc1020, const char *name,
@@ -466,6 +470,34 @@ static int fpc1020_config_gpio(struct fpc1020_data *fpc1020)
 
 }
 
+static int config_rst_power_down(struct fpc1020_data *fpc_data) {
+
+	struct device *dev = fpc_data->dev;
+	int result = 0;
+
+	fpc_data->rst_pinctrl = devm_pinctrl_get(dev);
+	if (IS_ERR(fpc_data->rst_pinctrl)) {
+         dev_err(dev, "%s: Can't get pinctrl\n",__func__);
+		 return -1;
+	}
+
+	fpc_data->rst_state = pinctrl_lookup_state(fpc_data->rst_pinctrl, rst_gpio_power_down_state);
+	if (IS_ERR_OR_NULL(fpc_data->rst_state)) {
+		dev_err(dev, "%s: Failed to lookup reset lower power state\n",__func__);
+		return -1;
+	}
+
+	result = pinctrl_select_state(fpc_data->rst_pinctrl, fpc_data->rst_state);
+	if (result) {
+		dev_err(dev, "%s: Can not set %s state\n",__func__, rst_gpio_power_down_state);
+		return -1;
+	}
+
+	dev_info(dev, "%s: finish\n",__func__);
+	return 0;
+}
+
+
 static int fpc1020_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -490,6 +522,11 @@ static int fpc1020_probe(struct platform_device *pdev)
 		rc = -EINVAL;
 		goto exit;
 	}
+
+	// Config reset lower power state
+	rc = config_rst_power_down(fpc1020);
+	if (rc)
+		goto exit;
 
 	// Request IRQ and Reset pin GPIO
 	rc = fpc1020_request_named_gpio(fpc1020, "fpc,gpio_irq",
