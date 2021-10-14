@@ -150,6 +150,7 @@ x509.genkey
 # generated defconfigs
 arch/*/configs/vendor/*_defconfig
 !arch/arm64/configs/vendor/renoir*
+!arch/arm64/configs/vendor/lahaina*
 
 # vendor device tree directories
 arch/arm64/boot/dts/vendor
