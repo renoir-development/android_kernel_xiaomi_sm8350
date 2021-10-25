@@ -1091,7 +1091,7 @@ err_return:
 }
 #endif
 
-extern int mi_display_pm_suspend(void);
+//extern int mi_display_pm_suspend(void);
 static int longpress_kthread(void *_pon)
 {
 #ifdef CONFIG_MTD_BLOCK2MTD
@@ -1099,7 +1099,7 @@ static int longpress_kthread(void *_pon)
 	ktime_t time_to_S2, time_S2;
 
 	dev_err(pon->dev, "Long press :Start to run longpress_kthread ");
-	mi_display_pm_suspend();
+	//mi_display_pm_suspend();
 
 	long_press();
 
