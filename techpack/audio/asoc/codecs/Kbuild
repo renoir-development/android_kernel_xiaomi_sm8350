@@ -269,9 +269,7 @@ ifneq (,$(filter $(TARGET_PRODUCT), venus star haydn odin))
 	obj-y	+= cs35l41/
 endif
 
-ifneq (,$(filter $(TARGET_PRODUCT), renoir lisa))
-	obj-y	+= tfa98xx/
-endif
+obj-y	+= tfa98xx/
 
 # Module information used by KBuild framework
 obj-$(CONFIG_WCD9XXX_CODEC_CORE) += wcd_core_dlkm.o
