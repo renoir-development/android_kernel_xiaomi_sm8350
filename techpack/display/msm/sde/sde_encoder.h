@@ -185,6 +185,7 @@ struct sde_encoder_ops {
  * @recovery_events_enabled:	status of hw recovery feature enable by client
  * @elevated_ahb_vote:		increase AHB bus speed for the first frame
  *				after power collapse
+ * @pm_qos_cpu_req:		qos request for all cpu core frequency
  * @valid_cpu_mask:		actual voted cpu core mask
  * @mode_info:                  stores the current mode and should be used
  *				only in commit phase
@@ -256,6 +257,7 @@ struct sde_encoder_virt {
 
 	bool recovery_events_enabled;
 	bool elevated_ahb_vote;
+	struct dev_pm_qos_request pm_qos_cpu_req[NR_CPUS];
 	struct cpumask valid_cpu_mask;
 	struct msm_mode_info mode_info;
 	bool delay_kickoff;
@@ -484,11 +486,12 @@ int sde_encoder_display_failure_notification(struct drm_encoder *enc,
 bool sde_encoder_recovery_events_enabled(struct drm_encoder *encoder);
 
 /**
- * sde_encoder_enable_recovery_event - handler to enable the sw recovery
- * for this connector
+ * sde_encoder_recovery_events_handler - handler to enable/disable the
+ * sw recovery for this connector
  * @drm_enc:    Pointer to drm encoder structure
  */
-void sde_encoder_enable_recovery_event(struct drm_encoder *encoder);
+void sde_encoder_recovery_events_handler(struct drm_encoder *encoder,
+		bool val);
 /**
  * sde_encoder_in_clone_mode - checks if underlying phys encoder is in clone
  *	mode or independent display mode. ref@ WB in Concurrent writeback mode.
