@@ -1,8 +1,7 @@
-# SPDX-License-Identifier: GPL-2.0-only
+#-----------------------------------#
+#    Kconfig for FingerprintCard    #
+#-----------------------------------#
 
-config FINGERPRINT_FPC_TEE
-	tristate "FPC1020 fingerprint sensor IRQ support"
-	depends on INPUT_FINGERPRINT
-	help
-		If you say yes here you get IRQ support for the FPC1020 family
-		of fingerprint sensors from Fingerprint Cards (FPC).
+config FPC_FINGERPRINT
+	default n
+	tristate "fpc1020 fingerprint driver"

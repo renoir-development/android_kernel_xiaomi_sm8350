@@ -1,6 +1,12 @@
-# SPDX-License-Identifier: GPL-2.0-only
+#---------------------------------#
+#  Makefile for FignerprintCard   #
+#---------------------------------#
 
-# Makefile for FingerprintCard fingerprint driver
+obj-$(CONFIG_FPC_FINGERPRINT) += fpc1020_platform_tee.o
 
-fpc1020-objs := fpc1020_platform_tee.o
-obj-$(CONFIG_FINGERPRINT_FPC_TEE) += fpc1020.o
+KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
+M ?= $(shell pwd)
+KBUILD_OPTIONS += CONFIG_FPC_FINGERPRINT=m
+
+modules modules_install clean:
+	$(MAKE) -C $(KERNEL_SRC) M=$(M) $(KBUILD_OPTIONS) W=1 $(@)
