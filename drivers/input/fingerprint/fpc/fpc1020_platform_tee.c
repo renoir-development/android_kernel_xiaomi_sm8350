@@ -427,6 +427,22 @@ exit:
 	return rc;
 }
 
+static ssize_t pinctl_set(struct device *dev,
+			  struct device_attribute *attr, const char *buf,
+			  size_t count)
+{
+	struct fpc1020_data *fpc1020 = dev_get_drvdata(dev);
+	int rc;
+
+	mutex_lock(&fpc1020->lock);
+	rc = select_pin_ctl(fpc1020, buf);
+	mutex_unlock(&fpc1020->lock);
+
+	return rc ? rc : count;
+}
+
+static DEVICE_ATTR(pinctl_set, S_IWUSR, NULL, pinctl_set);
+
 static ssize_t regulator_enable_set(struct device *dev,
 				    struct device_attribute *attr,
 				    const char *buf, size_t count)
@@ -660,6 +676,44 @@ static DEVICE_ATTR(power_cfg, S_IWUSR, NULL, wakeup_enable_set);
 static DEVICE_ATTR(wakeup_enable, S_IWUSR, NULL, wakeup_enable_set);
 
 /**
+ * sysfs node for controlling the wakelock.
+ */
+static ssize_t handle_wakelock_cmd(struct device *dev,
+				   struct device_attribute *attr,
+				   const char *buf, size_t count)
+{
+	struct fpc1020_data *fpc1020 = dev_get_drvdata(dev);
+	ssize_t ret = count;
+
+	mutex_lock(&fpc1020->lock);
+	if (!strncmp(buf, RELEASE_WAKELOCK_W_V,
+		     min(count, strlen(RELEASE_WAKELOCK_W_V)))) {
+		if (fpc1020->nbr_irqs_received_counter_start ==
+		    fpc1020->nbr_irqs_received) {
+			__pm_relax(fpc1020->ttw_wl);
+		} else {
+			dev_dbg(dev, "Ignore releasing of wakelock %d != %d",
+				fpc1020->nbr_irqs_received_counter_start,
+				fpc1020->nbr_irqs_received);
+		}
+	} else if (!strncmp(buf, RELEASE_WAKELOCK, min(count,
+						       strlen
+						       (RELEASE_WAKELOCK)))) {
+		__pm_relax(fpc1020->ttw_wl);
+	} else if (!strncmp(buf, START_IRQS_RECEIVED_CNT,
+			    min(count, strlen(START_IRQS_RECEIVED_CNT)))) {
+		fpc1020->nbr_irqs_received_counter_start =
+		    fpc1020->nbr_irqs_received;
+	} else
+		ret = -EINVAL;
+	mutex_unlock(&fpc1020->lock);
+
+	return ret;
+}
+
+static DEVICE_ATTR(handle_wakelock, S_IWUSR, NULL, handle_wakelock_cmd);
+
+/**
  * sysf node to check the interrupt status of the sensor, the interrupt
  * handler should perform sysf_notify to allow userland to poll the node.
  */
@@ -702,15 +756,56 @@ static ssize_t fingerdown_wait_set(struct device *dev,
 
 static DEVICE_ATTR(fingerdown_wait, S_IWUSR, NULL, fingerdown_wait_set);
 
+static ssize_t vendor_update(struct device *dev,
+			     struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	int rc;
+	//rc = add_hw_component_info(HWMON_CONPONENT_NAME, "ic_vendor", (char *)buf);
+	//rc = add_hw_component_info(HWMON_CONPONENT_NAME, "reserve", "0xFFFF");
+	return rc ? rc : count;
+}
+
+static DEVICE_ATTR(vendor, S_IWUSR, NULL, vendor_update);
+
+static ssize_t irq_enable_set(struct device *dev,
+			      struct device_attribute *attr,
+			      const char *buf, size_t count)
+{
+	int rc = 0;
+	struct fpc1020_data *fpc1020 = dev_get_drvdata(dev);
+
+	if (!strncmp(buf, "1", strlen("1"))) {
+		mutex_lock(&fpc1020->lock);
+		enable_irq(gpio_to_irq(fpc1020->irq_gpio));
+		mutex_unlock(&fpc1020->lock);
+		pr_debug("fpc enable irq\n");
+	} else if (!strncmp(buf, "0", strlen("0"))) {
+		mutex_lock(&fpc1020->lock);
+		disable_irq(gpio_to_irq(fpc1020->irq_gpio));
+		mutex_unlock(&fpc1020->lock);
+		pr_debug("fpc disable irq\n");
+	}
+
+	return rc ? rc : count;
+}
+
+static DEVICE_ATTR(irq_enable, S_IWUSR | S_IRUSR | S_IRGRP | S_IWGRP, NULL,
+		   irq_enable_set);
+
 static struct attribute *attributes[] = {
 	&dev_attr_request_vreg.attr,
+	&dev_attr_pinctl_set.attr,
 	&dev_attr_device_prepare.attr,
 	&dev_attr_regulator_enable.attr,
 	&dev_attr_hw_reset.attr,
 	&dev_attr_wakeup_enable.attr,
+	&dev_attr_handle_wakelock.attr,
 	&dev_attr_clk_enable.attr,
+	&dev_attr_irq_enable.attr,
 	&dev_attr_power_cfg.attr,
 	&dev_attr_irq.attr,
+	&dev_attr_vendor.attr,
 	&dev_attr_fingerdown_wait.attr,
 	NULL
 };
