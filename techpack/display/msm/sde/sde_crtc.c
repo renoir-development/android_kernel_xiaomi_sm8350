@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014-2020 The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -40,6 +41,8 @@
 #include "sde_power_handle.h"
 #include "sde_core_perf.h"
 #include "sde_trace.h"
+
+#include "mi_sde_crtc.h"
 
 #define SDE_PSTATES_MAX (SDE_STAGE_MAX * 4)
 #define SDE_MULTIRECT_PLANE_MAX (SDE_STAGE_MAX * 2)
@@ -2231,12 +2234,12 @@ static void sde_crtc_frame_event_cb(void *data, u32 event)
 	SDE_DEBUG("crtc%d\n", crtc->base.id);
 	SDE_EVT32_VERBOSE(DRMID(crtc), event);
 
-	spin_lock_irqsave(&sde_crtc->spin_lock, flags);
+	spin_lock_irqsave(&sde_crtc->fevent_spin_lock, flags);
 	fevent = list_first_entry_or_null(&sde_crtc->frame_event_list,
 			struct sde_crtc_frame_event, list);
 	if (fevent)
 		list_del_init(&fevent->list);
-	spin_unlock_irqrestore(&sde_crtc->spin_lock, flags);
+	spin_unlock_irqrestore(&sde_crtc->fevent_spin_lock, flags);
 
 	if (!fevent) {
 		SDE_ERROR("crtc%d event %d overflow\n",
@@ -2535,9 +2538,9 @@ static void sde_crtc_frame_event_work(struct kthread_work *work)
 		SDE_ERROR("crtc%d ts:%lld received panel dead event\n",
 				crtc->base.id, ktime_to_ns(fevent->ts));
 
-	spin_lock_irqsave(&sde_crtc->spin_lock, flags);
+	spin_lock_irqsave(&sde_crtc->fevent_spin_lock, flags);
 	list_add_tail(&fevent->list, &sde_crtc->frame_event_list);
-	spin_unlock_irqrestore(&sde_crtc->spin_lock, flags);
+	spin_unlock_irqrestore(&sde_crtc->fevent_spin_lock, flags);
 	SDE_ATRACE_END("crtc_frame_event");
 }
 
@@ -3504,7 +3507,7 @@ static void sde_crtc_destroy_state(struct drm_crtc *crtc,
 			&cstate->property_state);
 }
 
-static int _sde_crtc_flush_event_thread(struct drm_crtc *crtc)
+static int _sde_crtc_flush_frame_events(struct drm_crtc *crtc)
 {
 	struct sde_crtc *sde_crtc;
 	int i;
@@ -3746,6 +3749,9 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
 
 	idle_pc_state = sde_crtc_get_property(cstate, CRTC_PROP_IDLE_PC_STATE);
 
+	mi_sde_crtc_update_layer_state(cstate);
+
+	sde_crtc->kickoff_in_progress = true;
 	list_for_each_entry(encoder, &dev->mode_config.encoder_list, head) {
 		if (encoder->crtc != crtc)
 			continue;
@@ -3780,7 +3786,7 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
 
 	sde_crtc_calc_fps(sde_crtc);
 	SDE_ATRACE_BEGIN("flush_event_thread");
-	_sde_crtc_flush_event_thread(crtc);
+	_sde_crtc_flush_frame_events(crtc);
 	SDE_ATRACE_END("flush_event_thread");
 	sde_crtc->plane_mask_old = crtc->state->plane_mask;
 
@@ -3807,6 +3813,7 @@ void sde_crtc_commit_kickoff(struct drm_crtc *crtc,
 
 		sde_encoder_kickoff(encoder, false, true);
 	}
+	sde_crtc->kickoff_in_progress = false;
 
 	/* store the event after frame trigger */
 	if (sde_crtc->event) {
@@ -4162,7 +4169,7 @@ static void sde_crtc_disable(struct drm_crtc *crtc)
 			(u8 *)&power_on);
 
 	mutex_unlock(&sde_crtc->crtc_lock);
-	_sde_crtc_flush_event_thread(crtc);
+	kthread_flush_worker(&priv->event_thread[crtc->index].worker);
 	mutex_lock(&sde_crtc->crtc_lock);
 
 	kthread_cancel_delayed_work_sync(&sde_crtc->static_cache_read_work);
@@ -5383,6 +5390,9 @@ static void sde_crtc_install_properties(struct drm_crtc *crtc,
 
 	sde_crtc_setup_capabilities_blob(info, catalog);
 
+	/* mi properties */
+	mi_sde_crtc_install_properties(&sde_crtc->property_info);
+
 	msm_property_install_range(&sde_crtc->property_info,
 		"input_fence_timeout", 0x0, 0,
 		SDE_CRTC_MAX_INPUT_FENCE_TIMEOUT, SDE_CRTC_INPUT_FENCE_TIMEOUT,
@@ -6586,9 +6596,11 @@ struct drm_crtc *sde_crtc_init(struct drm_device *dev, struct drm_plane *plane)
 
 	mutex_init(&sde_crtc->crtc_lock);
 	spin_lock_init(&sde_crtc->spin_lock);
+	spin_lock_init(&sde_crtc->fevent_spin_lock);
 	atomic_set(&sde_crtc->frame_pending, 0);
 
 	sde_crtc->enabled = false;
+	sde_crtc->kickoff_in_progress = false;
 
 	/* Below parameters are for fps calculation for sysfs node */
 	sde_crtc->fps_info.fps_periodic_duration = DEFAULT_FPS_PERIOD_1_SEC;
