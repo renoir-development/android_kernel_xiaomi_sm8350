@@ -1327,6 +1327,7 @@ source "drivers/input/touchscreen/fts_spi/Kconfig"
 source "drivers/input/touchscreen/cyttsp5/Kconfig"
 source "drivers/input/touchscreen/zinitix_bt541/Kconfig"
 source "drivers/input/touchscreen/focaltech_spi/Kconfig"
+source "drivers/input/touchscreen/gt9897t/Kconfig"
 source "drivers/input/touchscreen/focaltech_3658u/Kconfig"
 
 config TOUCHSCREEN_SYNAPTICS_DSX
