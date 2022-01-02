@@ -1834,6 +1834,62 @@ account_busy_for_task_demand(struct rq *rq, struct task_struct *p, int event)
 
 unsigned int sysctl_sched_task_unfilter_period = 100000000;
 
+#ifdef CONFIG_PACKAGE_RUNTIME_INFO
+static int
+__account_busy_for_task_demand(struct rq *rq, struct task_struct *p, int event,
+		bool account_wait_time)
+{
+	/*
+	 * No need to bother updating task demand for exiting tasks
+	 * or the idle task.
+	 */
+	if (is_idle_task(p))
+		return 0;
+
+	/*
+	 * When a task is waking up it is completing a segment of non-busy
+	 * time. Likewise, if wait time is not treated as busy time, then
+	 * when a task begins to run or is migrated, it is not running and
+	 * is completing a segment of non-busy time.
+	 */
+	if (event == TASK_WAKE || (!account_wait_time &&
+			 (event == PICK_NEXT_TASK || event == TASK_MIGRATE)))
+		return 0;
+
+	/*
+	 * The idle exit time is not accounted for the first task _picked_ up to
+	 * run on the idle CPU.
+	 */
+	if (event == PICK_NEXT_TASK && rq->curr == rq->idle)
+		return 0;
+
+	/*
+	 * TASK_UPDATE can be called on sleeping task, when its moved between
+	 * related groups
+	 */
+	if (event == TASK_UPDATE) {
+		if (rq->curr == p)
+			return 1;
+
+		return p->on_rq ? account_wait_time : 0;
+	}
+
+	return 1;
+}
+
+static int
+account_pkg_busy_time(struct rq *rq, struct task_struct *p, int event)
+{
+	if (is_idle_task(p)) {
+		if (event == PICK_NEXT_TASK)
+			return 0;
+
+		return 1;
+	}
+
+	return __account_busy_for_task_demand(rq, p, event, false);
+}
+#endif
 /*
  * Called when new window is starting for a task, to record cpu usage over
  * recently concluded window(s). Normally 'samples' should be 1. It can be > 1
@@ -2154,10 +2210,27 @@ void walt_update_task_ravg(struct task_struct *p, struct rq *rq, int event,
 	update_cpu_busy_time(p, rq, event, wallclock, irqtime);
 	update_task_pred_demand(rq, p, event);
 
+#ifdef CONFIG_PACKAGE_RUNTIME_INFO
+	if (pkg_enable()) {
+		int fstat = 0;
+		u64 delta = 0;
+		int pkg_task_busy = account_pkg_busy_time(rq, p, event);
+		if (pkg_task_busy) {
+			fstat |= PKG_TASK_BUSY;
+			if (is_idle_task(p))
+				delta = irqtime;
+			else
+				delta = wallclock - p->wts.mark_start;
+			delta = scale_exec_time(delta, rq);
+			update_pkg_load(p, rq->cpu, fstat, wallclock, delta);
+		}
+	}
+#endif
 	trace_sched_update_task_ravg(p, rq, event, wallclock, irqtime,
 				&rq->wrq.grp_time);
 	trace_sched_update_task_ravg_mini(p, rq, event, wallclock, irqtime,
 				&rq->wrq.grp_time);
+
 
 done:
 	p->wts.mark_start = wallclock;
