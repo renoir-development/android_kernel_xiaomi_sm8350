@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2019-2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 
@@ -142,6 +143,7 @@ static struct cam_vfe_bus_ver3_reg_offset_ubwc_client
 	.lossy_thresh1    = 0x00000E58,
 	.off_lossy_var    = 0x00000E5C,
 	.bw_limit         = 0x00000E1C,
+	.ubwc_comp_en_bit = BIT(1),
 };
 
 static struct cam_vfe_bus_ver3_reg_offset_ubwc_client
@@ -155,6 +157,7 @@ static struct cam_vfe_bus_ver3_reg_offset_ubwc_client
 	.lossy_thresh1    = 0x00000F58,
 	.off_lossy_var    = 0x00000F5C,
 	.bw_limit         = 0x00000F1C,
+	.ubwc_comp_en_bit = BIT(1),
 };
 
 static struct cam_vfe_bus_ver3_reg_offset_ubwc_client
@@ -168,6 +171,7 @@ static struct cam_vfe_bus_ver3_reg_offset_ubwc_client
 	.lossy_thresh1    = 0x00001258,
 	.off_lossy_var    = 0x0000125C,
 	.bw_limit         = 0x0000121C,
+	.ubwc_comp_en_bit = BIT(1),
 };
 
 static struct cam_vfe_bus_ver3_reg_offset_ubwc_client
@@ -181,6 +185,7 @@ static struct cam_vfe_bus_ver3_reg_offset_ubwc_client
 	.lossy_thresh1    = 0x00001358,
 	.off_lossy_var    = 0x0000135C,
 	.bw_limit         = 0x0000131C,
+	.ubwc_comp_en_bit = BIT(1),
 };
 
 static struct cam_vfe_bus_ver3_hw_info vfe680_bus_hw_info = {
@@ -280,6 +285,9 @@ static struct cam_vfe_bus_ver3_hw_info vfe680_bus_hw_info = {
 			.image_cfg_1              = 0x00001010,
 			.image_cfg_2              = 0x00001014,
 			.packer_cfg               = 0x00001018,
+			.frame_header_addr        = 0x00001020,
+			.frame_header_incr        = 0x00001024,
+			.frame_header_cfg         = 0x00001028,
 			.irq_subsample_period     = 0x00001030,
 			.irq_subsample_pattern    = 0x00001034,
 			.framedrop_period         = 0x00001038,
@@ -306,6 +314,9 @@ static struct cam_vfe_bus_ver3_hw_info vfe680_bus_hw_info = {
 			.image_cfg_1              = 0x00001110,
 			.image_cfg_2              = 0x00001114,
 			.packer_cfg               = 0x00001118,
+			.frame_header_addr        = 0x00001120,
+			.frame_header_incr        = 0x00001124,
+			.frame_header_cfg         = 0x00001128,
 			.irq_subsample_period     = 0x00001130,
 			.irq_subsample_pattern    = 0x00001134,
 			.framedrop_period         = 0x00001138,
@@ -390,6 +401,9 @@ static struct cam_vfe_bus_ver3_hw_info vfe680_bus_hw_info = {
 			.image_cfg_1              = 0x00001410,
 			.image_cfg_2              = 0x00001414,
 			.packer_cfg               = 0x00001418,
+			.frame_header_addr        = 0x00001420,
+			.frame_header_incr        = 0x00001424,
+			.frame_header_cfg         = 0x00001428,
 			.irq_subsample_period     = 0x00001430,
 			.irq_subsample_pattern    = 0x00001434,
 			.framedrop_period         = 0x00001438,
@@ -416,6 +430,9 @@ static struct cam_vfe_bus_ver3_hw_info vfe680_bus_hw_info = {
 			.image_cfg_1              = 0x00001510,
 			.image_cfg_2              = 0x00001514,
 			.packer_cfg               = 0x00001518,
+			.frame_header_addr        = 0x00001520,
+			.frame_header_incr        = 0x00001524,
+			.frame_header_cfg         = 0x00001528,
 			.irq_subsample_period     = 0x00001530,
 			.irq_subsample_pattern    = 0x00001534,
 			.framedrop_period         = 0x00001538,
@@ -471,6 +488,9 @@ static struct cam_vfe_bus_ver3_hw_info vfe680_bus_hw_info = {
 			.image_cfg_1              = 0x00001710,
 			.image_cfg_2              = 0x00001714,
 			.packer_cfg               = 0x00001718,
+			.frame_header_addr        = 0x00001720,
+			.frame_header_incr        = 0x00001724,
+			.frame_header_cfg         = 0x00001728,
 			.irq_subsample_period     = 0x00001730,
 			.irq_subsample_pattern    = 0x00001734,
 			.framedrop_period         = 0x00001738,

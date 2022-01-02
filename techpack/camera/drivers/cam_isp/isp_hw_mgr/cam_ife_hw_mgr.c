@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #include <linux/slab.h>
@@ -1267,6 +1268,8 @@ static int cam_ife_hw_mgr_acquire_res_ife_out_rdi(
 		vfe_acquire.vfe_out.split_id = CAM_ISP_HW_SPLIT_LEFT;
 		vfe_acquire.vfe_out.unique_id = ife_ctx->ctx_index;
 		vfe_acquire.vfe_out.is_dual = 0;
+		vfe_acquire.vfe_out.disable_ubwc_comp =
+			g_ife_hw_mgr.debug_cfg.disable_ubwc_comp;
 		vfe_acquire.event_cb = cam_ife_hw_mgr_event_handler;
 		hw_intf = ife_src_res->hw_res[0]->hw_intf;
 		rc = hw_intf->hw_ops.reserve(hw_intf->hw_priv,
@@ -1347,6 +1350,8 @@ static int cam_ife_hw_mgr_acquire_res_ife_out_pixel(
 		vfe_acquire.vfe_out.out_port_info =  out_port;
 		vfe_acquire.vfe_out.is_dual       = ife_src_res->is_dual_isp;
 		vfe_acquire.vfe_out.unique_id     = ife_ctx->ctx_index;
+		vfe_acquire.vfe_out.disable_ubwc_comp =
+			g_ife_hw_mgr.debug_cfg.disable_ubwc_comp;
 		vfe_acquire.event_cb = cam_ife_hw_mgr_event_handler;
 
 		for (j = 0; j < CAM_ISP_HW_SPLIT_MAX; j++) {
@@ -1863,6 +1868,7 @@ static int cam_ife_mgr_acquire_cid_res(
 	if (rc || !csid_acquire.node_res) {
 		CAM_ERR(CAM_ISP, "No %d paths available rc %d rsrc %p",
 			path_res_id, rc, csid_acquire.node_res);
+
 		goto put_res;
 	}
 
@@ -4014,7 +4020,7 @@ static int cam_ife_mgr_config_hw(void *hw_mgr_priv,
 			(ctx->custom_config & CAM_IFE_CUSTOM_CFG_SW_SYNC_ON)) {
 			rem_jiffies = wait_for_completion_timeout(
 				&ctx->config_done_complete,
-				msecs_to_jiffies(60));
+				msecs_to_jiffies(120)); // xiaomi modified to enlarge cfg timeout
 			if (rem_jiffies == 0) {
 				CAM_ERR(CAM_ISP,
 					"config done completion timeout for req_id=%llu ctx_index %d",
@@ -4468,7 +4474,7 @@ static int cam_ife_mgr_start_hw(void *hw_mgr_priv, void *start_hw_args)
 	struct cam_ife_hw_mgr_ctx        *ctx;
 	struct cam_isp_hw_mgr_res        *hw_mgr_res;
 	struct cam_isp_resource_node     *rsrc_node = NULL;
-	uint32_t                          i, j, camif_debug, disable_ubwc_comp;
+	uint32_t                          i, camif_debug;
 	bool                              res_rdi_context_set = false;
 	uint32_t                          primary_rdi_src_res;
 	uint32_t                          primary_rdi_out_res;
@@ -4539,27 +4545,6 @@ static int cam_ife_mgr_start_hw(void *hw_mgr_priv, void *start_hw_args)
 					&camif_debug,
 					sizeof(camif_debug));
 			}
-		}
-	}
-
-	if (g_ife_hw_mgr.debug_cfg.disable_ubwc_comp) {
-		disable_ubwc_comp = 1;
-		for (i = 0; i < max_ife_out_res; i++) {
-			hw_mgr_res = &ctx->res_list_ife_out[i];
-			for (j = 0; j < CAM_ISP_HW_SPLIT_MAX; j++) {
-				if (!hw_mgr_res->hw_res[i])
-					continue;
-
-				rsrc_node = hw_mgr_res->hw_res[i];
-				if (rsrc_node->hw_intf->hw_ops.process_cmd) {
-					rc = rsrc_node->hw_intf->hw_ops.process_cmd(
-						rsrc_node->hw_intf->hw_priv,
-						CAM_ISP_HW_CMD_DISABLE_UBWC_COMP,
-						&disable_ubwc_comp,
-						sizeof(disable_ubwc_comp));
-				}
-			}
-			break;
 		}
 	}
 
@@ -6500,7 +6485,6 @@ static int cam_ife_mgr_prepare_hw_update(void *hw_mgr_priv,
 			return rc;
 
 		frame_header_enable = true;
-		prepare_hw_data->frame_header_res_id = 0x0;
 	}
 
 	if (ctx->internal_cdm)
@@ -6604,14 +6588,6 @@ static int cam_ife_mgr_prepare_hw_update(void *hw_mgr_priv,
 				prepare_hw_data->frame_header_res_id,
 				prepare_hw_data->frame_header_cpu_addr);
 		}
-	}
-
-	/* Check if frame header was enabled for any WM */
-	if ((ctx->custom_config & CAM_IFE_CUSTOM_CFG_FRAME_HEADER_TS) &&
-		(prepare->num_out_map_entries) &&
-		(!prepare_hw_data->frame_header_res_id)) {
-		CAM_ERR(CAM_ISP, "Failed to configure frame header");
-		goto end;
 	}
 
 	/*

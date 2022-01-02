@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #include <linux/debugfs.h>
@@ -730,6 +731,12 @@ static void __cam_isp_ctx_send_sof_timestamp(
 	if ((ctx_isp->use_frame_header_ts) || (request_id == 0))
 		goto end;
 
+	if (ctx_isp->offline_context) {
+		CAM_DBG(CAM_ISP,
+			"Don't sent sof timestamp for offline context");
+		return;
+	}
+
 	req_msg.session_hdl = ctx_isp->base->session_hdl;
 	req_msg.u.frame_msg.frame_id = ctx_isp->frame_id;
 	req_msg.u.frame_msg.request_id = request_id;
@@ -867,6 +874,8 @@ static int __cam_isp_ctx_handle_buf_done_for_req_list(
 		ctx_isp->req_info.last_bufdone_req_id = req->request_id;
 		ctx_isp->last_bufdone_err_apply_req_id = 0;
 	}
+
+	cam_cpas_notify_event("IFE BufDone", buf_done_req_id);
 
 	cam_cpas_notify_event("IFE BufDone", buf_done_req_id);
 
@@ -1777,6 +1786,7 @@ static int __cam_isp_ctx_notify_sof_in_activated_state(
 					"CDM callback not happened for req: %lld, possible CDM stuck or workqueue delay",
 					req->request_id);
 				req_isp->num_acked = 0;
+				req_isp->num_deferred_acks = 0;
 				ctx_isp->bubble_frame_cnt = 0;
 				req_isp->bubble_detected = false;
 				req_isp->cdm_reset_before_apply = true;
