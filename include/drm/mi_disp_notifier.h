@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2019, The Linux Foundation. All rights reserved.
  * Copyright (C) 2021 XiaoMi, Inc.
+ * Copyright (C) 2020 XiaoMi, Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -22,6 +23,8 @@
 #define MI_DISP_DPMS_EVENT             0x01
 /* A hardware display power mode state early change occurred */
 #define MI_DISP_DPMS_EARLY_EVENT       0x02
+/* A hardware display mode state after fps changed */
+#define MI_DISP_FPS_CHANGE_EVENT       0xF628
 
 enum {
 	/* panel: power on */
