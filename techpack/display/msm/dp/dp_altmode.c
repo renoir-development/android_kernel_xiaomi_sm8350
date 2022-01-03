@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2012-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -40,7 +40,8 @@ enum dp_altmode_pin_assignment {
 	DPAM_HPD_F,
 };
 
-static int dp_altmode_release_ss_lanes(struct dp_altmode_private *altmode)
+static int dp_altmode_release_ss_lanes(struct dp_altmode_private *altmode,
+		bool multi_func)
 {
 	int rc;
 	struct device_node *np;
@@ -69,7 +70,7 @@ static int dp_altmode_release_ss_lanes(struct dp_altmode_private *altmode)
 	}
 
 	while (timeout) {
-		rc = dwc3_msm_release_ss_lane(&usb_pdev->dev);
+		rc = dwc3_msm_release_ss_lane(&usb_pdev->dev, multi_func);
 		if (rc != -EBUSY)
 			break;
 
@@ -127,7 +128,8 @@ static int dp_altmode_notify(void *priv, void *data, size_t len)
 	altmode->dp_altmode.base.hpd_high = !!hpd_state;
 	altmode->dp_altmode.base.hpd_irq = !!hpd_irq;
 	altmode->dp_altmode.base.multi_func = force_multi_func ? true :
-		!(pin == DPAM_HPD_C || pin == DPAM_HPD_E);
+		!(pin == DPAM_HPD_C || pin == DPAM_HPD_E ||
+		pin == DPAM_HPD_OUT);
 
 	DP_DEBUG("payload=0x%x\n", dp_data);
 	DP_DEBUG("port_index=%d, orientation=%d, pin=%d, hpd_state=%d\n",
@@ -177,11 +179,10 @@ static int dp_altmode_notify(void *priv, void *data, size_t len)
 
 		altmode->dp_altmode.base.orientation = orientation;
 
-		if (!altmode->dp_altmode.base.multi_func) {
-			rc = dp_altmode_release_ss_lanes(altmode);
-			if (rc)
-				goto ack;
-		}
+		rc = dp_altmode_release_ss_lanes(altmode,
+				altmode->dp_altmode.base.multi_func);
+		if (rc)
+			goto ack;
 
 		if (altmode->dp_cb && altmode->dp_cb->configure)
 			altmode->dp_cb->configure(altmode->dev);

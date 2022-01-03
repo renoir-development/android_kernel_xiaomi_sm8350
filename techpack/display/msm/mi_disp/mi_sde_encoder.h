@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -30,5 +29,6 @@ struct calc_hw_vsync {
 void mi_sde_encoder_save_vsync_info(struct sde_encoder_phys *phys_enc);
 ssize_t mi_sde_encoder_calc_hw_vsync_info(struct dsi_display *display,
 			char *buf, size_t size);
+void mi_sde_encoder_calc_fps(struct drm_encoder *encoder);
 
 #endif /* _MI_SDE_ENCODER_H_ */

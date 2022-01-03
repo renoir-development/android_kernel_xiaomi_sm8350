@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
+ * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
@@ -234,7 +233,7 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	props.type = BACKLIGHT_RAW;
 	props.power = FB_BLANK_UNBLANK;
 	props.max_brightness = bl_config->brightness_max_level;
-	props.brightness = bl_config->brightness_max_level;
+	props.brightness = bl_config->brightness_init_level;
 	snprintf(bl_node_name, BL_NODE_NAME_SIZE, "panel%u-backlight",
 							display_count);
 	c_conn->bl_device = backlight_device_register(bl_node_name, dev->dev,
@@ -452,6 +451,20 @@ static void sde_connector_get_avail_res_info(struct drm_connector *conn,
 	sde_rm_get_resource_info(&sde_kms->rm, drm_enc, avail_res);
 
 	avail_res->max_mixer_width = sde_kms->catalog->max_mixer_width;
+}
+
+int sde_connector_get_lm_cnt_from_topology(struct drm_connector *conn,
+		const struct drm_display_mode *drm_mode)
+{
+	struct sde_connector *c_conn;
+
+	c_conn = to_sde_connector(conn);
+
+	if (!c_conn || c_conn->connector_type != DRM_MODE_CONNECTOR_DSI ||
+		!c_conn->ops.get_num_lm_from_mode)
+		return -EINVAL;
+
+	return c_conn->ops.get_num_lm_from_mode(c_conn->display, drm_mode);
 }
 
 int sde_connector_get_mode_info(struct drm_connector *conn,
@@ -892,6 +905,8 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 
 	SDE_EVT32_VERBOSE(connector->base.id);
 
+	mi_sde_connector_gir_fence(connector);
+
 	mi_sde_connector_fod_hbm_fence(connector);
 
 	rc = c_conn->ops.pre_kickoff(connector, c_conn->display, &params);
@@ -1002,9 +1017,12 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 	 */
 	if (display->panel->bl_config.bl_update ==
 				BL_UPDATE_DELAY_UNTIL_FIRST_FRAME) {
-		if (!c_conn->allow_bl_update)
+		if (!c_conn->allow_bl_update) {
 			sde_encoder_wait_for_event(c_conn->encoder,
 					MSM_ENC_TX_COMPLETE);
+			SDE_INFO("[%s]show first frame done, bl:%d\n",
+				display->panel->name, c_conn->unset_bl_level);
+		}
 	}
 	c_conn->allow_bl_update = true;
 
@@ -1956,6 +1974,8 @@ static ssize_t _sde_debugfs_conn_cmd_tx_write(struct file *file,
 {
 	struct drm_connector *connector = file->private_data;
 	struct sde_connector *c_conn = NULL;
+	struct sde_vm_ops *vm_ops;
+	struct sde_kms *sde_kms;
 	char *input, *token, *input_copy, *input_dup = NULL;
 	const char *delim = " ";
 	char buffer[MAX_CMD_PAYLOAD_SIZE] = {0};
@@ -1966,8 +1986,13 @@ static ssize_t _sde_debugfs_conn_cmd_tx_write(struct file *file,
 		SDE_ERROR("invalid argument(s), conn %d\n", connector != NULL);
 		return -EINVAL;
 	}
-
 	c_conn = to_sde_connector(connector);
+
+	sde_kms = _sde_connector_get_kms(&c_conn->base);
+	if (!sde_kms) {
+		SDE_ERROR("invalid kms\n");
+		return -EINVAL;
+	}
 
 	if (!c_conn->ops.cmd_transfer) {
 		SDE_ERROR("no cmd transfer support for connector name %s\n",
@@ -1978,6 +2003,14 @@ static ssize_t _sde_debugfs_conn_cmd_tx_write(struct file *file,
 	input = kzalloc(count + 1, GFP_KERNEL);
 	if (!input)
 		return -ENOMEM;
+
+	vm_ops = sde_vm_get_ops(sde_kms);
+	sde_vm_lock(sde_kms);
+	if (vm_ops && vm_ops->vm_owns_hw && !vm_ops->vm_owns_hw(sde_kms)) {
+		SDE_DEBUG("op not supported due to HW unavailablity\n");
+		rc = -EOPNOTSUPP;
+		goto end;
+	}
 
 	if (copy_from_user(input, p, count)) {
 		SDE_ERROR("copy from user failed\n");
@@ -2028,6 +2061,7 @@ static ssize_t _sde_debugfs_conn_cmd_tx_write(struct file *file,
 end1:
 	kfree(input_dup);
 end:
+	sde_vm_unlock(sde_kms);
 	kfree(input);
 	return rc;
 }
@@ -2454,6 +2488,7 @@ void _sde_connector_report_panel_dead(struct sde_connector *conn,
 		skip_pre_kickoff);
 
 	conn->panel_dead = true;
+
 	event.type = DRM_EVENT_PANEL_DEAD;
 	event.length = sizeof(bool);
 	msm_mode_object_event_notify(&conn->base.base,
@@ -2609,6 +2644,8 @@ static int sde_connector_populate_mode_info(struct drm_connector *conn,
 			SDE_ERROR_CONN(c_conn, "invalid topology\n");
 			continue;
 		}
+
+		sde_kms_info_add_keyint(info, "has_cwb_crop", sde_kms->catalog->has_cwb_crop);
 
 		sde_kms_info_add_keyint(info, "mdp_transfer_time_us",
 			mode_info.mdp_transfer_time_us);
@@ -3060,8 +3097,7 @@ error_free_conn:
 	return ERR_PTR(rc);
 }
 
-static int _sde_conn_hw_recovery_handler(
-		struct drm_connector *connector, bool val)
+static int _sde_conn_enable_hw_recovery(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn;
 
@@ -3072,7 +3108,7 @@ static int _sde_conn_hw_recovery_handler(
 	c_conn = to_sde_connector(connector);
 
 	if (c_conn->encoder)
-		sde_encoder_recovery_events_handler(c_conn->encoder, val);
+		sde_encoder_enable_recovery_event(c_conn->encoder);
 
 	return 0;
 }
@@ -3090,7 +3126,7 @@ int sde_connector_register_custom_event(struct sde_kms *kms,
 		ret = 0;
 		break;
 	case DRM_EVENT_SDE_HW_RECOVERY:
-		ret = _sde_conn_hw_recovery_handler(conn_drm, val);
+		ret = _sde_conn_enable_hw_recovery(conn_drm);
 		break;
 	default:
 		break;

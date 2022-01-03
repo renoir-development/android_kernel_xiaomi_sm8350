@@ -1319,17 +1319,16 @@ static void dsi_configure_command_scheduling(struct dsi_ctrl *dsi_ctrl,
 	}
 
 	/*
-	 * In case of command scheduling in command mode, the window size
-	 * is reset to zero, if the total scheduling window is greater
-	 * than the panel height.
+	 * In case of command scheduling in command mode, set the maximum
+	 * possible size of the DMA start window in case no schedule line and
+	 * window size properties are defined by the panel.
 	 */
 	if ((dsi_ctrl->host_config.panel_mode == DSI_OP_CMD_MODE) &&
 			dsi_hw_ops.configure_cmddma_window) {
-		sched_line_no = line_no;
 
-		if ((sched_line_no + window) > timing->v_active)
-			window = 0;
-
+		sched_line_no = (line_no == 0) ? TEARCHECK_WINDOW_SIZE :
+					line_no;
+		window = (window == 0) ? timing->v_active : window;
 		sched_line_no += timing->v_active;
 
 		dsi_hw_ops.configure_cmddma_window(&dsi_ctrl->hw, cmd_mem,
@@ -1374,8 +1373,21 @@ static void dsi_kickoff_msg_tx(struct dsi_ctrl *dsi_ctrl,
 		dsi_hw_ops.reset_trig_ctrl(&dsi_ctrl->hw,
 				&dsi_ctrl->host_config.common_config);
 
-	/* check if custom dma scheduling line needed */
-	if (flags & DSI_CTRL_CMD_CUSTOM_DMA_SCHED)
+	/*
+	 * Always enable DMA scheduling for video mode panel.
+	 *
+	 * In video mode panel, if the DMA is triggered very close to
+	 * the beginning of the active window and the DMA transfer
+	 * happens in the last line of VBP, then the HW state will
+	 * stay in ‘wait’ and return to ‘idle’ in the first line of VFP.
+	 * But somewhere in the middle of the active window, if SW
+	 * disables DSI command mode engine while the HW is still
+	 * waiting and re-enable after timing engine is OFF. So the
+	 * HW never ‘sees’ another vblank line and hence it gets
+	 * stuck in the ‘wait’ state.
+	 */
+	if ((flags & DSI_CTRL_CMD_CUSTOM_DMA_SCHED) ||
+		(dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE))
 		dsi_configure_command_scheduling(dsi_ctrl, cmd_mem);
 
 	dsi_ctrl->cmd_mode = (dsi_ctrl->host_config.panel_mode ==
@@ -1493,6 +1505,39 @@ static void dsi_ctrl_validate_msg_flags(struct dsi_ctrl *dsi_ctrl,
 		*flags &= ~DSI_CTRL_CMD_ASYNC_WAIT;
 }
 
+/**
+ * dsi_ctrl_clear_slave_dma_status -   API to clear slave DMA status
+ * @dsi_ctrl:                   DSI controller handle.
+ * @flags:                      Modifiers
+ */
+static void dsi_ctrl_clear_slave_dma_status(struct dsi_ctrl *dsi_ctrl, u32 flags)
+{
+	struct dsi_ctrl_hw_ops dsi_hw_ops;
+	u32 status = 0;
+
+	if (!dsi_ctrl) {
+		DSI_CTRL_ERR(dsi_ctrl, "Invalid params\n");
+		return;
+	}
+
+	/* Return if this is not the last command */
+	if (!(flags & DSI_CTRL_CMD_LAST_COMMAND))
+		return;
+
+	SDE_EVT32(dsi_ctrl->cell_index, SDE_EVTLOG_FUNC_ENTRY);
+
+	dsi_hw_ops = dsi_ctrl->hw.ops;
+
+	status = dsi_hw_ops.poll_slave_dma_status(&dsi_ctrl->hw);
+
+	if (status) {
+		status |= (DSI_CMD_MODE_DMA_DONE | DSI_BTA_DONE);
+		dsi_hw_ops.clear_interrupt_status(&dsi_ctrl->hw,
+						status);
+		SDE_EVT32(dsi_ctrl->cell_index, status);
+	}
+}
+
 static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl,
 			  const struct mipi_dsi_msg *msg,
 			  u32 *flags)
@@ -1524,6 +1569,9 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl,
 
 	if (dsi_ctrl->dma_wait_queued)
 		dsi_ctrl_flush_cmd_dma_queue(dsi_ctrl);
+
+	if (!(*flags & DSI_CTRL_CMD_BROADCAST_MASTER))
+		dsi_ctrl_clear_slave_dma_status(dsi_ctrl, *flags);
 
 	if (*flags & DSI_CTRL_CMD_NON_EMBEDDED_MODE) {
 		cmd_mem.offset = dsi_ctrl->cmd_buffer_iova;
@@ -1710,14 +1758,16 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 			  const struct mipi_dsi_msg *msg,
 			  u32 *flags)
 {
-	int rc = 0;
+	int rc = 0, i = 0;
 	u32 rd_pkt_size, total_read_len, hw_read_cnt;
 	u32 current_read_len = 0, total_bytes_read = 0;
 	bool short_resp = false;
 	bool read_done = false;
 	u32 dlen, diff, rlen;
-	unsigned char *buff;
+	unsigned char *buff = NULL;
 	char cmd;
+	u32 buffer_sz = 0, header_offset = 0;
+	u8 *head = NULL;
 
 	if (!msg) {
 		DSI_CTRL_ERR(dsi_ctrl, "Invalid msg\n");
@@ -1730,6 +1780,12 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 		short_resp = true;
 		rd_pkt_size = msg->rx_len;
 		total_read_len = 4;
+
+		/*
+		 * buffer size: header + data
+		 * No 32 bits alignment issue, thus offset is 0
+		 */
+		buffer_sz = 4;
 	} else {
 		short_resp = false;
 		current_read_len = 10;
@@ -1739,8 +1795,31 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 			rd_pkt_size = current_read_len;
 
 		total_read_len = current_read_len + 6;
+
+		/*
+		 * buffer size: header + data + footer, rounded up to 4 bytes
+		 * Out of bound can occurs is rx_len is not aligned to size 4.
+		 * We are reading 32 bits registers, and converting
+		 * the data to CPU endianness, thus inserting garbage data
+		 * at the beginning of buffer.
+		 */
+		buffer_sz = (((4 + msg->rx_len + 2) + 3) >> 2) << 2;
+		if (buffer_sz < 16)
+			buffer_sz = 16;
 	}
-	buff = msg->rx_buf;
+
+	pr_debug("short_resp %d, msg->rx_len %d, rd_pkt_size %u\n",
+			short_resp, (int)msg->rx_len, rd_pkt_size);
+
+	pr_debug("total_read_len %u, buffer_sz %u\n",
+			total_read_len, buffer_sz);
+
+	buff = kzalloc(buffer_sz, GFP_KERNEL);
+	if (!buff) {
+		rc = -ENOMEM;
+		goto error;
+	}
+	head = buff;
 
 	while (!read_done) {
 		rc = dsi_set_max_return_size(dsi_ctrl, msg, rd_pkt_size);
@@ -1798,13 +1877,21 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 		}
 	}
 
+	buff = head;
+	pr_debug("==data from hw==\n");
+	for (i = 0; i < buffer_sz; i++)
+		pr_debug("buffer[%d] = %02x\n", i, buff[i]);
+
 	if (hw_read_cnt < 16 && !short_resp)
-		buff = msg->rx_buf + (16 - hw_read_cnt);
+		header_offset = (16 - hw_read_cnt);
 	else
-		buff = msg->rx_buf;
+		header_offset = 0;
+
+	pr_debug("hw_read_cnt %d, header_offset %d\n",
+			hw_read_cnt, header_offset);
 
 	/* parse the data read from panel */
-	cmd = buff[0];
+	cmd = buff[header_offset];
 	switch (cmd) {
 	case MIPI_DSI_RX_ACKNOWLEDGE_AND_ERROR_REPORT:
 		DSI_CTRL_ERR(dsi_ctrl, "Rx ACK_ERROR 0x%x\n", cmd);
@@ -1812,22 +1899,30 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 		break;
 	case MIPI_DSI_RX_GENERIC_SHORT_READ_RESPONSE_1BYTE:
 	case MIPI_DSI_RX_DCS_SHORT_READ_RESPONSE_1BYTE:
-		rc = dsi_parse_short_read1_resp(msg, buff);
+		pr_debug("short 1 byte read response\n");
+		rc = dsi_parse_short_read1_resp(msg, &buff[header_offset]);
 		break;
 	case MIPI_DSI_RX_GENERIC_SHORT_READ_RESPONSE_2BYTE:
 	case MIPI_DSI_RX_DCS_SHORT_READ_RESPONSE_2BYTE:
-		rc = dsi_parse_short_read2_resp(msg, buff);
+		pr_debug("short 2 byte read response\n");
+		rc = dsi_parse_short_read2_resp(msg, &buff[header_offset]);
 		break;
 	case MIPI_DSI_RX_GENERIC_LONG_READ_RESPONSE:
 	case MIPI_DSI_RX_DCS_LONG_READ_RESPONSE:
-		rc = dsi_parse_long_read_resp(msg, buff);
+		pr_debug("long read response\n");
+		rc = dsi_parse_long_read_resp(msg, &buff[header_offset]);
 		break;
 	default:
 		DSI_CTRL_WARN(dsi_ctrl, "Invalid response: 0x%x\n", cmd);
 		rc = 0;
 	}
 
+	pr_debug("==data to client==\n");
+	for (i = 0; i < msg->rx_len; i++)
+		pr_debug("rx_buf[%d] = %02x\n", i, ((u8 *)msg->rx_buf)[i]);
+
 error:
+	kfree(buff);
 	return rc;
 }
 

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -190,7 +189,7 @@ static ssize_t doze_brightness_store(struct device *device,
 	int ret = 0;
 
 	if (dd_ptr->intf_type == MI_INTF_DSI) {
-		ret = kstrtoint(buf, 0, &doze_brightness);;
+		ret = kstrtoint(buf, 0, &doze_brightness);
 		if (ret)
 			return ret;
 		ret = mi_dsi_display_set_doze_brightness(dd_ptr->display, doze_brightness);
@@ -285,6 +284,23 @@ static ssize_t hw_vsync_info_show(struct device *device,
 	return ret;
 }
 
+static ssize_t cell_id_show(struct device *device,
+		struct device_attribute *attr, char *buf)
+{
+	struct disp_display *dd_ptr = to_disp_display(device);
+	int ret = 0;
+
+	if (dd_ptr->intf_type == MI_INTF_DSI) {
+		return mi_dsi_display_cell_id_read(dd_ptr->display, buf, PAGE_SIZE);
+	} else {
+		DISP_ERROR("Unsupported display(%s intf)\n",
+			get_disp_intf_type_name(dd_ptr->intf_type));
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
 static DEVICE_ATTR_RW(disp_param);
 static DEVICE_ATTR_RW(mipi_rw);
 static DEVICE_ATTR_RO(panel_info);
@@ -294,6 +310,7 @@ static DEVICE_ATTR_RW(doze_brightness);
 static DEVICE_ATTR_RO(gamma_test);
 static DEVICE_ATTR_RW(brightness_clone);
 static DEVICE_ATTR_RO(hw_vsync_info);
+static DEVICE_ATTR_RO(cell_id);
 
 static struct attribute *disp_feature_attrs[] = {
 	&dev_attr_disp_param.attr,
@@ -305,6 +322,7 @@ static struct attribute *disp_feature_attrs[] = {
 	&dev_attr_gamma_test.attr,
 	&dev_attr_brightness_clone.attr,
 	&dev_attr_hw_vsync_info.attr,
+	&dev_attr_cell_id.attr,
 	NULL
 };
 

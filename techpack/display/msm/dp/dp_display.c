@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -1053,16 +1053,21 @@ error_ctrl:
 	return rc;
 }
 
-static void dp_display_host_ready(struct dp_display_private *dp)
+static int dp_display_host_ready(struct dp_display_private *dp)
 {
+	int rc = 0;
+
 	if (!dp_display_state_is(DP_STATE_INITIALIZED)) {
-		dp_display_state_show("[not initialized]");
-		return;
+		rc = dp_display_host_init(dp);
+		if (rc) {
+			dp_display_state_show("[not initialized]");
+			return rc;
+		}
 	}
 
 	if (dp_display_state_is(DP_STATE_READY)) {
 		dp_display_state_log("[already ready]");
-		return;
+		return rc;
 	}
 
 	/*
@@ -1090,6 +1095,7 @@ static void dp_display_host_ready(struct dp_display_private *dp)
 	dp_display_state_add(DP_STATE_READY);
 	/* log this as it results from user action of cable connection */
 	DP_INFO("[OK]\n");
+	return rc;
 }
 
 static void dp_display_host_unready(struct dp_display_private *dp)
@@ -1192,7 +1198,11 @@ static int dp_display_process_hpd_high(struct dp_display_private *dp)
 		dp_display_state_remove(DP_STATE_SRC_PWRDN);
 	}
 
-	dp_display_host_ready(dp);
+	rc = dp_display_host_ready(dp);
+	if (rc) {
+		dp_display_state_show("[ready failed]");
+		goto end;
+	}
 
 	dp->link->psm_config(dp->link, &dp->panel->link_info, false);
 	dp->debug->psm_enabled = false;
@@ -1604,6 +1614,7 @@ static void dp_display_attention_work(struct work_struct *work)
 {
 	struct dp_display_private *dp = container_of(work,
 			struct dp_display_private, attention_work);
+	int rc = 0;
 
 	SDE_EVT32_EXTERNAL(SDE_EVTLOG_FUNC_ENTRY, dp->state);
 	mutex_lock(&dp->session_lock);
@@ -1673,16 +1684,20 @@ static void dp_display_attention_work(struct work_struct *work)
 		if (dp->link->sink_request & DP_TEST_LINK_TRAINING) {
 			SDE_EVT32_EXTERNAL(dp->state, DP_TEST_LINK_TRAINING);
 			dp->link->send_test_response(dp->link);
-			dp->ctrl->link_maintenance(dp->ctrl);
+			rc = dp->ctrl->link_maintenance(dp->ctrl);
 		}
 
 		if (dp->link->sink_request & DP_LINK_STATUS_UPDATED) {
 			SDE_EVT32_EXTERNAL(dp->state, DP_LINK_STATUS_UPDATED);
-			dp->ctrl->link_maintenance(dp->ctrl);
+			rc = dp->ctrl->link_maintenance(dp->ctrl);
 		}
 
-		dp_audio_enable(dp, true);
+		if (!rc)
+			dp_audio_enable(dp, true);
+
 		mutex_unlock(&dp->session_lock);
+		if (rc)
+			goto exit;
 
 		if (dp->link->sink_request & (DP_TEST_LINK_PHY_TEST_PATTERN |
 			DP_TEST_LINK_TRAINING))
@@ -1883,6 +1898,7 @@ static int dp_init_sub_modules(struct dp_display_private *dp)
 	}
 
 	g_dp_display->is_mst_supported = dp->parser->has_mst;
+	g_dp_display->dsc_cont_pps = dp->parser->dsc_continuous_pps;
 
 	dp->catalog = dp_catalog_get(dev, dp->parser);
 	if (IS_ERR(dp->catalog)) {
@@ -2203,7 +2219,12 @@ static int dp_display_prepare(struct dp_display *dp_display, void *panel)
 	}
 
 	/* For supporting DP_PANEL_SRC_INITIATED_POWER_DOWN case */
-	dp_display_host_ready(dp);
+	rc = dp_display_host_ready(dp);
+
+	if (rc) {
+		dp_display_state_show("[ready failed]");
+		goto end;
+	}
 
 	if (dp->debug->psm_enabled) {
 		dp->link->psm_config(dp->link, &dp->panel->link_info, false);
@@ -2688,55 +2709,6 @@ static int dp_display_validate_pixel_clock(struct dp_display_mode dp_mode,
 	return 0;
 }
 
-static int dp_display_validate_mixers(struct msm_drm_private *priv,
-		struct drm_display_mode *mode,
-		const struct msm_resource_caps_info *avail_res)
-{
-	int rc;
-	u32 num_lm = 0;
-
-	rc = msm_get_mixer_count(priv, mode, avail_res, &num_lm);
-	if (rc) {
-		DP_ERR("error getting mixer count. rc:%d\n", rc);
-		return rc;
-	}
-
-	if (num_lm > avail_res->num_lm) {
-		DP_DEBUG("num lm:%d > available lm:%d\n", num_lm,
-				avail_res->num_lm);
-		return -EPERM;
-	}
-
-	return 0;
-}
-
-static int dp_display_validate_dscs(struct msm_drm_private *priv,
-		struct dp_panel *dp_panel, struct drm_display_mode *mode,
-		struct dp_display_mode *dp_mode,
-		const struct msm_resource_caps_info *avail_res)
-{
-	int rc;
-	u32 num_dsc = 0;
-	bool dsc_capable = dp_mode->capabilities & DP_PANEL_CAPS_DSC;
-
-	if (!dp_panel->dsc_en || !dsc_capable)
-		return 0;
-
-	rc = msm_get_dsc_count(priv, mode->hdisplay, &num_dsc);
-	if (rc) {
-		DP_ERR("error getting dsc count. rc:%d\n", rc);
-		return rc;
-	}
-
-	if (num_dsc > avail_res->num_dsc) {
-		DP_DEBUG("num dsc:%d > available dsc:%d\n", num_dsc,
-				avail_res->num_dsc);
-		return -EPERM;
-	}
-
-	return 0;
-}
-
 static int dp_display_validate_topology(struct dp_display_private *dp,
 		struct dp_panel *dp_panel, struct drm_display_mode *mode,
 		struct dp_display_mode *dp_mode,
@@ -2744,9 +2716,10 @@ static int dp_display_validate_topology(struct dp_display_private *dp,
 {
 	int rc;
 	struct msm_drm_private *priv = dp->priv;
-	const u32 dual_lm = 2, quad_lm = 4;
+	const u32 dual = 2, quad = 4;
 	u32 num_lm = 0, num_dsc = 0, num_3dmux = 0;
 	bool dsc_capable = dp_mode->capabilities & DP_PANEL_CAPS_DSC;
+	u32 fps = dp_mode->timing.refresh_rate;
 
 	rc = msm_get_mixer_count(priv, mode, avail_res, &num_lm);
 	if (rc) {
@@ -2754,23 +2727,41 @@ static int dp_display_validate_topology(struct dp_display_private *dp,
 		return rc;
 	}
 
-	num_3dmux = avail_res->num_3dmux;
-
+	/* Merge using DSC, if enabled */
 	if (dp_panel->dsc_en && dsc_capable) {
 		rc = msm_get_dsc_count(priv, mode->hdisplay, &num_dsc);
 		if (rc) {
 			DP_ERR("error getting dsc count. rc:%d\n", rc);
 			return rc;
 		}
+
+		/* Only DSCMERGE is supported on DP */
+		num_lm  = max(num_lm, num_dsc);
+		num_dsc = max(num_lm, num_dsc);
+	} else {
+		num_3dmux = avail_res->num_3dmux;
 	}
 
-	/* filter out unsupported DP topologies */
-	if ((num_lm == dual_lm && (!num_3dmux && !num_dsc)) ||
-			(num_lm == quad_lm && (num_dsc != 4))) {
-		DP_DEBUG("invalid topology lm:%d dsc:%d 3dmux:%d intf:1\n",
-				num_lm, num_dsc, num_3dmux);
+	if (num_lm > avail_res->num_lm) {
+		DP_DEBUG("mode %sx%d is invalid, not enough lm %d %d\n",
+				mode->name, fps, num_lm, num_lm, avail_res->num_lm);
+		return -EPERM;
+	} else if (num_dsc > avail_res->num_dsc) {
+		DP_DEBUG("mode %sx%d is invalid, not enough dsc %d %d\n",
+				mode->name, fps, num_dsc, avail_res->num_dsc);
+		return -EPERM;
+	} else if (!num_dsc && (num_lm == dual && !num_3dmux)) {
+		DP_DEBUG("mode %sx%d is invalid, not enough 3dmux %d %d\n",
+				mode->name, fps, num_3dmux, avail_res->num_3dmux);
+		return -EPERM;
+	} else if (num_lm == quad && num_dsc != quad)  {
+		DP_DEBUG("mode %sx%d is invalid, unsupported DP topology lm:%d dsc:%d\n",
+				mode->name, fps, num_lm, num_dsc);
 		return -EPERM;
 	}
+
+	DP_DEBUG("mode %sx%d is valid, supported DP topology lm:%d dsc:%d 3dmux:%d\n",
+				mode->name, fps, num_lm, num_dsc, num_3dmux);
 
 	return 0;
 }
@@ -2881,15 +2872,6 @@ static enum drm_mode_status dp_display_validate_mode(
 		goto end;
 
 	rc = dp_display_validate_pixel_clock(dp_mode, dp_display->max_pclk_khz);
-	if (rc)
-		goto end;
-
-	rc = dp_display_validate_mixers(dp->priv, mode, avail_res);
-	if (rc)
-		goto end;
-
-	rc = dp_display_validate_dscs(dp->priv, panel, mode, &dp_mode,
-			avail_res);
 	if (rc)
 		goto end;
 

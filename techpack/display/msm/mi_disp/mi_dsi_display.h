@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -81,5 +80,8 @@ void mi_dsi_display_wakeup_pending_doze_work(struct dsi_display *display);
 bool mi_is_doze_full_brightness_supported(void *display);
 
 void mi_dsi_display_update_backlight(struct dsi_display *display);
+
+ssize_t mi_dsi_display_cell_id_read(void *display,
+			char *buf, size_t size);
 
 #endif /*_MI_DSI_DISPLAY_H_*/

@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -162,7 +161,6 @@ int mi_disp_feature_attach_display(void *display, int disp_id, int intf_type) { 
 int mi_disp_feature_detach_display(void *display, int disp_id, int intf_type) { return 0; }
 
 void mi_disp_feature_event_notify(struct disp_event *event, u8 *payload) { return 0; }
-
 void mi_disp_feature_sysfs_notify(int disp_id, int sysfs_node) {}
 struct disp_feature *mi_get_disp_feature(void) { return NULL; }
 
