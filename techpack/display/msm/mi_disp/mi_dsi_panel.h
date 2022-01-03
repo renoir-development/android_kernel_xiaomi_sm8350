@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -14,11 +15,8 @@
 #include "dsi_panel.h"
 #include "dsi_defs.h"
 #include "mi_disp_feature.h"
-#include <linux/pm_wakeup.h>
-#include "drm_mipi_dsi.h"
 
 #define DEMURA_BL_LEVEL_MAX 10
-#define BL_STATISTIC_CNT_MAX 10
 
 enum bkl_dimming_state {
 	STATE_NONE,
@@ -44,25 +42,12 @@ struct gamma_cfg {
 	u8 flash_read_ba[63];
 	u8 flash_read_checksum[2];
 
-	int update_b8_index;
-	int update_b9_index;
-	int update_ba_index;
+	u32 update_b8_index;
+	u32 update_b9_index;
+	u32 update_ba_index;
 
 	bool update_done_90hz;
 	bool update_done_144hz;
-};
-
-struct flatmode_cfg {
-	bool read_done;
-	int update_index;
-	u8 flatmode_param[4];
-};
-
-struct lhbm_rgb_cfg {
-	u32 lhbm_1000nit_rgb[3];
-	u32 lhbm_750nit_rgb[3];
-	u32 lhbm_500nit_rgb[3];
-	u32 lhbm_110nit_rgb[3];
 };
 
 /* Panel flag need update when panel power state changed*/
@@ -101,7 +86,6 @@ struct mi_dsi_panel_cfg {
 	 */
 	bool bl_is_big_endian;
 	u32 last_bl_level;
-	u32 last_no_zero_bl_level;
 
 	/* indicate refresh frequency Fps gpio */
 	int disp_rate_gpio;
@@ -109,12 +93,6 @@ struct mi_dsi_panel_cfg {
 	/* gamma read */
 	bool gamma_update_flag;
 	struct gamma_cfg gamma_cfg;
-	char demura_data[900];
-	struct lhbm_rgb_cfg lhbm_rgb_cfg;
-
-	/* flatmode read */
-	bool flatmode_update_flag;
-	struct flatmode_cfg flatmode_cfg;
 
 	/* indicate esd check gpio and config irq */
 	int esd_err_irq_gpio;
@@ -123,14 +101,11 @@ struct mi_dsi_panel_cfg {
 	bool esd_err_enabled;
 
 	u32 doze_brightness;
-	bool doze_to_off_command_enabled;
-	bool is_doze_to_off;
 	/* Some panel nolp command is different according to current doze brightness set,
 	 * But sometimes doze brightness change to DOZE_TO_NORMAL before nolp. So this
 	 * doze_brightness_backup will save doze_brightness and only change to DOZE_TO_NORMAL by nolp.
 	 */
 	u32 doze_brightness_backup;
-	struct wakeup_source *doze_wakelock;
 
 	bool hbm_51_ctl_flag;
 	int hbm_on_51_index;
@@ -141,9 +116,6 @@ struct mi_dsi_panel_cfg {
 	int hbm_bl_min_lvl;
 	int hbm_bl_max_lvl;
 	int hbm_brightness_flag;
-	int local_hbm_on_87_index;
-	int local_hbm_hlpm_on_87_index;
-	int cup_dbi_reg_index;
 
 	bool in_fod_calibration;
 
@@ -171,15 +143,14 @@ struct mi_dsi_panel_cfg {
 	u32 real_brightness_clone;
 	u32 max_brightness_clone;
 	u32 thermal_max_brightness_clone;
-	bool thermal_dimming;
 
 	bool local_hbm_enabled;
 	int local_hbm_on_1000nit_51_index;
 	int local_hbm_off_to_hbm_51_index;
-	int local_hbm_off_to_normal_51_index;
 	u32 fod_low_brightness_clone_threshold;
 	u32 fod_low_brightness_lux_threshold;
 	int local_hbm_target;
+	bool fod_low_brightness_allow;
 
 	u32 fod_type;
 	bool fp_display_on_optimize;
@@ -196,17 +167,11 @@ struct mi_dsi_panel_cfg {
 
 	int panel_state;
 	bool local_hbm_to_normal;
-	int bl_statistic_cnt;
+	bool fod_anim_on;
 	bool bl_need_update;
-
-	int aod_hbm_51_index;
-	int aod_lbm_51_index;
 
 	u32 aod_exit_delay_time;
 	u64 aod_enter_time;
-
-	u32 hbm_backlight_threshold;
-	bool gir_enabled;
 };
 
 struct dsi_read_config {
@@ -217,11 +182,6 @@ struct dsi_read_config {
 };
 
 extern struct dsi_read_config g_dsi_read_cfg;
-
-int mi_dsi_panel_init(struct dsi_panel *panel);
-int mi_dsi_panel_deinit(struct dsi_panel *panel);
-int mi_dsi_acquire_wakelock(struct dsi_panel *panel);
-int mi_dsi_release_wakelock(struct dsi_panel *panel);
 
 bool is_aod_and_panel_initialized(struct dsi_panel *panel);
 
@@ -250,8 +210,6 @@ int mi_dsi_panel_update_gamma_param(struct dsi_panel *panel);
 
 ssize_t mi_dsi_panel_print_gamma_param(struct dsi_panel *panel,
 			char *buf, size_t size);
-
-bool mi_dsi_panel_is_need_tx_cmd(u32 feature_id);
 
 int mi_dsi_panel_set_disp_param(struct dsi_panel *panel,
 			struct disp_feature_ctl *ctl);
@@ -292,7 +250,6 @@ void mi_dsi_dc_mode_enable(struct dsi_panel *panel,
 
 int mi_dsi_fps_switch(struct dsi_panel *panel);
 
-
 int mi_dsi_panel_set_brightness_clone(struct dsi_panel *panel,
 			u32 brightness_clone);
 
@@ -302,8 +259,6 @@ int mi_dsi_panel_get_brightness_clone(struct dsi_panel *panel,
 void mi_dsi_panel_demura_comp(struct dsi_panel *panel,
 			u32 bl_lvl);
 
-int mi_dsi_panel_demura_set(struct dsi_panel *panel);
-
 void mi_dsi_panel_dc_vi_setting(struct dsi_panel *panel,
 			u32 bl_lvl);
 
@@ -311,22 +266,10 @@ int mi_disp_set_fod_queue_work(u32 fod_btn, bool from_touch);
 
 void mi_dsi_update_backlight_in_aod(struct dsi_panel *panel, bool restore_backlight);
 
-void mi_dsi_update_dc_backlight(struct dsi_panel *panel, u32 bl_lvl);
-
-void mi_dsi_backlight_logging(struct dsi_panel *panel, u32 bl_lvl);
-
 void mi_disp_handle_lp_event(struct dsi_panel *panel, int power_mode);
 
-int mi_dsi_panel_lhbm_set(struct dsi_panel *panel);
+void mi_dsi_update_dc_backlight(struct dsi_panel *panel, u32 bl_lvl);
 
-int mi_dsi_panel_read_nvt_bic(struct dsi_panel *panel);
-
-char *mi_dsi_panel_get_bic_data_info(int * bic_len);
-
-char *mi_dsi_panel_get_bic_reg_data_array(struct dsi_panel *panel);
-
-int mi_dsi_panel_read_flatmode_param(struct dsi_panel *panel);
-
-int mi_dsi_panel_set_cup_dbi(struct dsi_panel *panel, int value);
+void mi_dsi_update_hbm51reg_in_aod(struct dsi_panel *panel);
 
 #endif /* _MI_DSI_PANEL_H_ */

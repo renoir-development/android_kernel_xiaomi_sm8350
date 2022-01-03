@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
@@ -1348,8 +1349,6 @@ static void sde_encoder_phys_cmd_disable(struct sde_encoder_phys *phys_enc)
 		else if (phys_enc->hw_pp->ops.enable_tearcheck)
 			phys_enc->hw_pp->ops.enable_tearcheck(phys_enc->hw_pp,
 					false);
-		if (sde_encoder_phys_cmd_is_master(phys_enc))
-			sde_encoder_helper_phys_disable(phys_enc, NULL);
 	}
 
 	phys_enc->enable_state = SDE_ENC_DISABLED;
@@ -1512,27 +1511,20 @@ static int _sde_encoder_phys_cmd_wait_for_wr_ptr(
 	struct sde_encoder_phys_cmd *cmd_enc =
 			to_sde_encoder_phys_cmd(phys_enc);
 	struct sde_encoder_wait_info wait_info = {0};
-	struct sde_connector *c_conn;
+	int ret;
 	bool frame_pending = true;
 	struct sde_hw_ctl *ctl;
 	unsigned long lock_flags;
-	int ret, timeout_ms;
 
-	if (!phys_enc || !phys_enc->hw_ctl || !phys_enc->connector) {
+	if (!phys_enc || !phys_enc->hw_ctl) {
 		SDE_ERROR("invalid argument(s)\n");
 		return -EINVAL;
 	}
 	ctl = phys_enc->hw_ctl;
-	c_conn = to_sde_connector(phys_enc->connector);
-	timeout_ms = KICKOFF_TIMEOUT_MS;
-
-	if (c_conn->lp_mode == SDE_MODE_DPMS_LP1 ||
-		c_conn->lp_mode == SDE_MODE_DPMS_LP2)
-		timeout_ms = (KICKOFF_TIMEOUT_MS) * 2;
 
 	wait_info.wq = &phys_enc->pending_kickoff_wq;
 	wait_info.atomic_cnt = &phys_enc->pending_retire_fence_cnt;
-	wait_info.timeout_ms = timeout_ms;
+	wait_info.timeout_ms = KICKOFF_TIMEOUT_MS;
 
 	/* slave encoder doesn't enable for ppsplit */
 	if (_sde_encoder_phys_is_ppsplit_slave(phys_enc))

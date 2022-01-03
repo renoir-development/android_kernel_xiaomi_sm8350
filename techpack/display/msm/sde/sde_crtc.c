@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2014-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2020 The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -40,7 +41,6 @@
 #include "sde_power_handle.h"
 #include "sde_core_perf.h"
 #include "sde_trace.h"
-#include "sde_vm.h"
 
 #include "mi_sde_crtc.h"
 
@@ -2297,7 +2297,7 @@ void sde_crtc_prepare_commit(struct drm_crtc *crtc,
 	dev = crtc->dev;
 	sde_crtc = to_sde_crtc(crtc);
 	cstate = to_sde_crtc_state(crtc->state);
-	SDE_EVT32_VERBOSE(DRMID(crtc), cstate->cwb_enc_mask);
+	SDE_EVT32_VERBOSE(DRMID(crtc));
 
 	SDE_ATRACE_BEGIN("sde_crtc_prepare_commit");
 
@@ -2317,7 +2317,6 @@ void sde_crtc_prepare_commit(struct drm_crtc *crtc,
 
 			cstate->connectors[cstate->num_connectors++] = conn;
 			sde_connector_prepare_fence(conn);
-			sde_encoder_set_clone_mode(encoder, crtc->state);
 		}
 	drm_connector_list_iter_end(&conn_iter);
 
@@ -2380,7 +2379,7 @@ enum sde_intf_mode sde_crtc_get_intf_mode(struct drm_crtc *crtc,
 	drm_for_each_encoder_mask(encoder, crtc->dev,
 			cstate->encoder_mask) {
 		/* continue if copy encoder is encountered */
-		if (sde_crtc_state_in_clone_mode(encoder, cstate))
+		if (sde_encoder_in_clone_mode(encoder))
 			continue;
 
 		return sde_encoder_get_intf_mode(encoder);
@@ -3260,6 +3259,7 @@ static void sde_crtc_atomic_begin(struct drm_crtc *crtc,
 	struct drm_encoder *encoder;
 	struct drm_device *dev;
 	struct sde_kms *sde_kms;
+	struct drm_plane *plane;
 	struct sde_splash_display *splash_display;
 	bool cont_splash_enabled = false, apply_cp_prop = false;
 	size_t i;
@@ -3319,8 +3319,14 @@ static void sde_crtc_atomic_begin(struct drm_crtc *crtc,
 	_sde_crtc_blend_setup(crtc, old_state, true);
 	_sde_crtc_dest_scaler_setup(crtc);
 
-	if (crtc->state->mode_changed)
+	if (old_state->mode_changed) {
 		sde_core_perf_crtc_update_uidle(crtc, true);
+		drm_atomic_crtc_for_each_plane(plane, crtc) {
+			if (plane->state && plane->state->fb)
+				_sde_plane_set_qos_lut(plane, crtc,
+					plane->state->fb);
+		}
+	}
 
 	/*
 	 * Since CP properties use AXI buffer to program the
@@ -3639,11 +3645,8 @@ int sde_crtc_reset_hw(struct drm_crtc *crtc, struct drm_crtc_state *old_state,
 		}
 	}
 
-	/*
-	 * Early out if simple ctl reset succeeded or reset is
-	 * being performed after timeout
-	 */
-	if (i == sde_crtc->num_ctls || crtc->state == old_state)
+	/* Early out if simple ctl reset succeeded */
+	if (i == sde_crtc->num_ctls)
 		return 0;
 
 	SDE_DEBUG("crtc%d: issuing hard reset\n", DRMID(crtc));
@@ -5080,57 +5083,40 @@ end:
 }
 
 /**
- * sde_crtc_get_num_datapath - get the number of layermixers active
- *				on primary connector
+ * sde_crtc_get_num_datapath - get the number of datapath active
+ *				of primary connector
  * @crtc: Pointer to DRM crtc object
- * @virtual_conn: Pointer to DRM connector object of WB in CWB case
- * @crtc_state:	Pointer to DRM crtc state
+ * @connector: Pointer to DRM connector object of WB in CWB case
  */
 int sde_crtc_get_num_datapath(struct drm_crtc *crtc,
-	struct drm_connector *virtual_conn, struct drm_crtc_state *crtc_state)
+		struct drm_connector *connector)
 {
 	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
-	struct drm_connector *conn, *primary_conn = NULL;
 	struct sde_connector_state *sde_conn_state = NULL;
+	struct drm_connector *conn;
 	struct drm_connector_list_iter conn_iter;
-	int num_lm = 0;
 
-	if (!sde_crtc || !virtual_conn || !crtc_state) {
+	if (!sde_crtc || !connector) {
 		SDE_DEBUG("Invalid argument\n");
 		return 0;
 	}
 
-	/* return num_mixers used for primary when available in sde_crtc */
 	if (sde_crtc->num_mixers)
 		return sde_crtc->num_mixers;
 
 	drm_connector_list_iter_begin(crtc->dev, &conn_iter);
 	drm_for_each_connector_iter(conn, &conn_iter) {
-		if ((drm_connector_mask(conn) & crtc_state->connector_mask)
-			 && conn != virtual_conn) {
+		if (conn->state && conn->state->crtc == crtc &&
+				 conn != connector)
 			sde_conn_state = to_sde_connector_state(conn->state);
-			primary_conn = conn;
-			break;
-		}
 	}
+
 	drm_connector_list_iter_end(&conn_iter);
 
-	/* if primary sde_conn_state has mode info available, return num_lm from here */
 	if (sde_conn_state)
-		num_lm = sde_conn_state->mode_info.topology.num_lm;
+		return sde_conn_state->mode_info.topology.num_lm;
 
-	/* if PM resume occurs with CWB enabled, retrieve num_lm from primary dsi panel mode */
-	if (primary_conn && !num_lm) {
-		num_lm = sde_connector_get_lm_cnt_from_topology(primary_conn,
-				&crtc_state->adjusted_mode);
-		if (num_lm < 0) {
-			SDE_DEBUG("lm cnt fail for conn:%d num_lm:%d\n",
-					 primary_conn->base.id, num_lm);
-			num_lm = 0;
-		}
-	}
-
-	return num_lm;
+	return 0;
 }
 
 int sde_crtc_vblank(struct drm_crtc *crtc, bool en)
@@ -6027,7 +6013,6 @@ static ssize_t _sde_crtc_misr_read(struct file *file,
 	struct sde_crtc *sde_crtc;
 	struct sde_kms *sde_kms;
 	struct sde_crtc_mixer *m;
-	struct sde_vm_ops *vm_ops;
 	int i = 0, rc;
 	ssize_t len = 0;
 	char buf[MISR_BUFF_SIZE + 1] = {'\0'};
@@ -6048,17 +6033,8 @@ static ssize_t _sde_crtc_misr_read(struct file *file,
 	if (rc < 0)
 		return rc;
 
-	vm_ops = sde_vm_get_ops(sde_kms);
-	sde_vm_lock(sde_kms);
-	if (vm_ops && vm_ops->vm_owns_hw && !vm_ops->vm_owns_hw(sde_kms)) {
-		SDE_DEBUG("op not supported due to HW unavailability\n");
-		rc = -EOPNOTSUPP;
-		goto end;
-	}
-
 	if (sde_kms_is_secure_session_inprogress(sde_kms)) {
 		SDE_DEBUG("crtc:%d misr read not allowed\n", DRMID(crtc));
-		rc = -EOPNOTSUPP;
 		goto end;
 	}
 
@@ -6108,7 +6084,6 @@ buff_check:
 	*ppos += len;   /* increase offset */
 
 end:
-	sde_vm_unlock(sde_kms);
 	pm_runtime_put_sync(crtc->dev->dev);
 	return len;
 }
@@ -6173,9 +6148,6 @@ static int _sde_debugfs_fence_status_show(struct seq_file *s, void *data)
 	dev = crtc->dev;
 	cstate = to_sde_crtc_state(crtc->state);
 
-	if (!sde_crtc->kickoff_in_progress)
-		goto skip_input_fence;
-
 	/* Dump input fence info */
 	seq_puts(s, "===Input fence===\n");
 	drm_atomic_crtc_for_each_plane(plane, crtc) {
@@ -6203,7 +6175,6 @@ static int _sde_debugfs_fence_status_show(struct seq_file *s, void *data)
 		}
 	}
 
-skip_input_fence:
 	/* Dump release fence info */
 	seq_puts(s, "\n");
 	seq_puts(s, "===Release fence===\n");

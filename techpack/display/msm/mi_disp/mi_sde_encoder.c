@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -117,7 +118,7 @@ ssize_t mi_sde_encoder_calc_hw_vsync_info(struct dsi_display *display,
 	/* Multiplying with 1000 to get fps in floating point */
 	calc_vsync->measured_fps_x1000 =
 			(u32)((NSEC_PER_SEC * 1000) / calc_vsync->measured_vsync_period_ns);
-	DISP_INFO("[hw_vsync_info]fps: %d.%d, vsync_period_ns:%lld,"
+	DISP_DEBUG("[hw_vsync_info]fps: %d.%d, vsync_period_ns:%lld,"
 			" panel_mode:%s, panel_type:%s, average of %d statistics\n",
 			calc_vsync->measured_fps_x1000 / 1000,
 			calc_vsync->measured_fps_x1000 % 1000,

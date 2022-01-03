@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -300,22 +301,20 @@ static void mi_disp_set_doze_brightness_work_handler(struct kthread_work *work)
 		DISP_INFO("%s pending_doze_cnt = %d\n",
 			display->display_type, atomic_read(&dd_ptr->pending_doze_cnt));
 		if (doze_brightness == DOZE_TO_NORMAL) {
-			ret = wait_event_interruptible(*(cur_work->wq),
+			ret = wait_event_freezable(*(cur_work->wq),
 				dsi_panel_initialized(display->panel));
 			if (ret) {
+				DISP_INFO("wait_event_freezable ret = %d\n", ret);
 				/* Some event woke us up, so let's quit */
-				DISP_INFO("wait_event_interruptible ret = %d\n", ret);
-				atomic_add_unless(&dd_ptr->pending_doze_cnt, -1, 0);
 				goto exit;
 			}
 			mi_dsi_display_set_doze_brightness(dd_ptr->display, doze_brightness);
 		} else {
-			ret = wait_event_interruptible(*(cur_work->wq),
+			ret = wait_event_freezable(*(cur_work->wq),
 				is_aod_and_panel_initialized(display->panel));
 			if (ret) {
+				DISP_INFO("wait_event_freezable ret = %d\n", ret);
 				/* Some event woke us up, so let's quit */
-				DISP_INFO("wait_event_interruptible ret = %d\n", ret);
-				atomic_add_unless(&dd_ptr->pending_doze_cnt, -1, 0);
 				goto exit;
 			}
 			mi_dsi_display_set_doze_brightness(dd_ptr->display, doze_brightness);
@@ -768,6 +767,7 @@ static int mi_disp_ioctl_get_brightness(
 	mutex_unlock(&client->client_lock);
 	return ret;
 }
+
 
 /* Ioctl table */
 static const struct disp_ioctl_desc disp_ioctls[] = {
