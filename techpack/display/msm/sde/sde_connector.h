@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
  */
 
 #ifndef _SDE_CONNECTOR_H_
@@ -15,7 +15,6 @@
 #include "msm_prop.h"
 #include "sde_kms.h"
 #include "sde_fence.h"
-#include "mi_sde_connector.h"
 
 #define SDE_CONNECTOR_NAME_SIZE	16
 #define SDE_CONNECTOR_DHDR_MEMPOOL_MAX_SIZE	SZ_32
@@ -383,14 +382,6 @@ struct sde_connector_ops {
 	 * Returns: Qsync min fps value on success
 	 */
 	int (*get_qsync_min_fps)(void *display, u32 mode_fps);
-
-	/**
-	 * get_num_lm_from_mode - Get LM count from topology for this drm mode
-	 * @display: Pointer to private display structure
-	 * @mode: Pointer to drm mode info structure
-	 */
-	int (*get_num_lm_from_mode)(void *display, const struct drm_display_mode *mode);
-
 };
 
 /**
@@ -512,7 +503,6 @@ struct sde_connector {
 	int dpms_mode;
 	int lp_mode;
 	int last_panel_power_mode;
-	int max_esd_check_power_mode;
 
 	struct msm_property_info property_info;
 	struct msm_property_data property_data[CONNECTOR_PROP_COUNT];
@@ -528,7 +518,6 @@ struct sde_connector {
 
 	struct backlight_device *bl_device;
 	struct sde_cdev *cdev;
-	struct mi_sde_cdev *mi_cdev;
 	struct notifier_block n;
 	unsigned long thermal_max_brightness;
 	struct delayed_work status_work;
@@ -563,7 +552,6 @@ struct sde_connector {
 	u8 cmd_rx_buf[MAX_CMD_RECEIVE_SIZE];
 	int rx_len;
 
-	struct mi_layer_state mi_layer_state;
 	struct edid *cached_edid;
 };
 
@@ -994,15 +982,6 @@ int sde_connector_state_get_mode_info(struct drm_connector_state *conn_state,
 	struct msm_mode_info *mode_info);
 
 /**
- * sde_connector_get_lm_cnt_from_topology - retrieves the topology info
- *	from the panel mode and returns the lm count.
- * conn: Pointer to DRM connector object
- * drm_mode: Pointer to the drm mode structure
- */
-int sde_connector_get_lm_cnt_from_topology(struct drm_connector *conn,
-	 const struct drm_display_mode *drm_mode);
-
-/**
  * sde_connector_state_get_topology - get topology from given connector state
  * conn_state: Pointer to the DRM connector state object
  * topology: Pointer to store topology info of the display
@@ -1106,7 +1085,5 @@ int sde_connector_get_panel_vfp(struct drm_connector *connector,
  * @connector: Pointer to DRM connector object
  */
 int sde_connector_esd_status(struct drm_connector *connector);
-void _sde_connector_report_panel_dead(struct sde_connector *conn,
-		bool skip_pre_kickoff);
 
 #endif /* _SDE_CONNECTOR_H_ */
