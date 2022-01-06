@@ -5,7 +5,7 @@ And public attribution of xiaomi platforms
 
 #include "lisa-pinctrl.dtsi"
 #include "xiaomi-sm7325-common.dtsi"
-#include "camera/lisa-sm7325-camera-sensor.dtsi"
+// #include "camera/lisa-sm7325-camera-sensor.dtsi"
 #include "lisa-audio-overlay.dtsi"
 
 &pm8350c_rgb {
