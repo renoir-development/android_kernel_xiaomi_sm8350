@@ -283,7 +283,7 @@
 			hw-thd-dat = <16>;
 			hw-thd-sta = <15>;
 			hw-tbuf = <24>;
-			hw-scl-stretch-en = <0>;
+			hw-scl-stretch-en = <1>;
 			hw-trdhld = <3>;
 			hw-tsp = <3>;
 			cci-clk-src = <37500000>;
@@ -376,7 +376,7 @@
 			hw-thd-dat = <16>;
 			hw-thd-sta = <15>;
 			hw-tbuf = <24>;
-			hw-scl-stretch-en = <0>;
+			hw-scl-stretch-en = <1>;
 			hw-trdhld = <3>;
 			hw-tsp = <3>;
 			cci-clk-src = <37500000>;
@@ -1798,6 +1798,7 @@
 		ubwc-ipe-write-cfg = <0x161ef 0x1620f>;
 		ubwc-bps-fetch-cfg = <0x707b 0x7083>;
 		ubwc-bps-write-cfg = <0x161ef 0x1620f>;
+		qos-val = <0x00000A0A>;
 		status = "ok";
 	};
 
