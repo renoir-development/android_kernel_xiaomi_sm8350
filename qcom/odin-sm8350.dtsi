@@ -54,8 +54,6 @@ And public attribution of xiaomi platforms(like venus and so and)
 &L11C {
 	regulator-boot-on;
 	regulator-always-on;
-	regulator-min-microvolt = <3008000>;
-	regulator-max-microvolt = <3008000>;
 	qcom,init-voltage = <3008000>;
 };
 
@@ -101,14 +99,13 @@ And public attribution of xiaomi platforms(like venus and so and)
 		fts,reset-gpio = <&tlmm 22 0x00>;
 		fts,reset-gpio-name = "fts_rst";
 		fts,irq-flags = <0x2008>;
-		fts,x-max = <10800>;
-		fts,y-max = <24000>;
-		fts,fod-lx = <4180>;
-		fts,fod-ly = <16810>;
-		fts,fod-x-size = <2420>;
-		fts,fod-y-size = <2410>;
+		fts,x-max = <1080>;
+		fts,y-max = <2400>;
+		fts,fod-lx = <418>;
+		fts,fod-ly = <1681>;
+		fts,fod-x-size = <242>;
+		fts,fod-y-size = <241>;
 		fts,support-fod;
-		fts,support-super-resolution = <1>;
 		spi-max-frequency = <7000000>;
 		fts,default-fw-name = "st_fts_k8.ftb";
 		fts,thp-fw-name = "st_fts_k8_thp.ftb";
@@ -129,12 +126,12 @@ And public attribution of xiaomi platforms(like venus and so and)
 
 		fts,touch-deadzone-filter-ver = <2 0 0 0 0 0 0 0
 									    2 1 0    0 0    0    0 0
-									    2 2 0    0 0    2399 0 0
-									    2 3 1079 0 1079 2399 0 0>;
-		fts,touch-deadzone-filter-hor = <2 0 0 0 1079 0 0 0 
-									    2 1 0    2399 1079 2399 0 0
-									    2 2 0    0    0    2399 0 0
-									    2 3 1079 0    1079 2399 0 0>;
+									    2 2 0    0 5    2399 0 0
+									    2 3 1074 0 1079 2399 0 0>;
+		fts,touch-deadzone-filter-hor = <2 0 0 0 1079 5 0 0
+									    2 1 0    2394 1079 2399 0 0
+									    2 2 0    0    5    2399 0 0
+									    2 3 1074 0    1079 2399 0 0>;
 		fts,touch-edgezone-filter-ver = <1 0 0 0 0 0 0 0
 									    1 1 0    0 0    0    0 0
 									    1 2 0    0 40   2339 0 0
@@ -160,12 +157,12 @@ And public attribution of xiaomi platforms(like venus and so and)
 										6 15 1
 										4 15 1
 										2 15 1>;
-		fts,touch-tap-sensitivity = <150 140 130 120 110>;
-		fts,touch-aim-sensitivity = <8 6 5 3 2>;
+		fts,touch-tap-sensitivity = <160 150 140 120 100>;
+		fts,touch-aim-sensitivity = <10 8 6 4 2>;
 		fts,touch-tap-stability = <8 12 15 18 25>;
-		fts,touch-expert-array = <2 15 1 120 3 15
-								  4 15 1 120 2 15
-								  6 15 1 120 5 15>;
+		fts,touch-expert-array = <6 15 1 120 6 15
+								  2 15 1 120 4 15
+								  4 15 1 120 2 15>;
 		fts,cfg_0 {
 			fts,tp-vendor = <0x38>;
 			fts,tp-color = <0x32>;
@@ -183,8 +180,6 @@ And public attribution of xiaomi platforms(like venus and so and)
 		compatible = "cirrus,cs35l41";
 		reset-gpios = <&tlmm 78 0>;
 		reg = <0x40>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&cs35l41_rcv_int_default>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <31 8>;
 		cirrus,temp-warn_threshold = <3>;
@@ -203,8 +198,6 @@ And public attribution of xiaomi platforms(like venus and so and)
 		reset-gpios = <&tlmm 78 0>;
 		spksw-gpios = <&tlmm 35 0>;
 		reg = <0x42>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&cs35l41_spk_int_default>;
 		interrupt-parent = <&tlmm>;
 		interrupts = <116 8>;
 		cirrus,temp-warn_threshold = <3>;
@@ -243,7 +236,7 @@ And public attribution of xiaomi platforms(like venus and so and)
 		vib_r_spare = < 0x68 >;
 		vib_bstdbg = < 0x30 0xeb 0xd4 0 0 0 >;
 		vib_effect_id_boundary = < 10 >;
-		vib_effect_max = < 193 >;
+		vib_effect_max = < 170 >;
 		vib_trig_config = < 0 1 0 1 2
 						0 1 0 1 2
 						0 1 0 1 2 >;
@@ -367,7 +360,7 @@ And public attribution of xiaomi platforms(like venus and so and)
 		config {
 			pins = "gpio155";
 			drive-strength = <2>;
-			bias-pull-up;
+			bias-disable;
 			output-low;
 		};
 	};
@@ -381,7 +374,7 @@ And public attribution of xiaomi platforms(like venus and so and)
 		config {
 			pins = "gpio155";
 			drive-strength = <2>;
-			bias-pull-up;
+			bias-disable;
 			output-high;
 		};
 	};
@@ -442,7 +435,7 @@ And public attribution of xiaomi platforms(like venus and so and)
 	pm8350b_usb_conn_therm {
 		pm8350b_usb_conn_therm_default: pm8350b_usb_conn_therm_default {
 			pins = "gpio2";
-			bias-high-impedance;
+			bias-disable;
 		};
 	};
 };
@@ -727,7 +720,4 @@ And public attribution of xiaomi platforms(like venus and so and)
 	thermal-message {
 		board-sensor = "VIRTUAL-SENSOR0";
 	};
-	thermal_screen: thermal-screen {
-		panel = <&dsi_k8_42_02_0a_dsc_cmd>;
-        };
 };

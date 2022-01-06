@@ -120,11 +120,6 @@
 //       };
 //};
 
-&fsa4480 {
-	pinctrl-names = "default";
-	pinctrl-0 = <&fsa_int_idle>;
-};
-
 &wcd938x_codec {
 	qcom,cdc-micbias1-mv = <2750>;
 	qcom,cdc-micbias2-mv = <2750>;

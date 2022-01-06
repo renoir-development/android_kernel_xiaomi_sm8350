@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: (GPL-2.0 OR BSD-2-Clause)
 # Copyright (C) STMicroelectronics 2019.
+# Copyright (C) 2021 XiaoMi, Inc.
 %YAML 1.2
 ---
 $id: http://devicetree.org/schemas/pinctrl/st,stm32-pinctrl.yaml#
