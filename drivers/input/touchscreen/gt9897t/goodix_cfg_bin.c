@@ -17,6 +17,7 @@
   */
 #include "goodix_ts_core.h"
 
+#define TS_DEFAULT_CFG_BIN		"goodix_gt9897t_cfg_k9.bin"
 #define TS_BIN_VERSION_START_INDEX			5
 #define TS_BIN_VERSION_LEN					4
 #define TS_CFG_BIN_HEAD_RESERVED_LEN		6
@@ -103,13 +104,12 @@ struct goodix_cfg_bin {
 
 static int goodix_read_cfg_bin(struct device *dev, struct goodix_cfg_bin *cfg_bin)
 {
-	struct goodix_ts_core *cd = dev->driver_data;
 	const struct firmware *firmware = NULL;
 	char cfg_bin_name[GOODIX_MAX_STR_LABLE_LEN] = {0x00};
 	int ret;
 
 	/*get cfg_bin_name*/
-	strlcpy(cfg_bin_name, cd->board_data.cfg_bin_name, sizeof(cfg_bin_name));
+	strlcpy(cfg_bin_name, TS_DEFAULT_CFG_BIN, sizeof(cfg_bin_name));
 	ts_info("cfg_bin_name:%s", cfg_bin_name);
 
 	ret = request_firmware(&firmware, cfg_bin_name, dev);

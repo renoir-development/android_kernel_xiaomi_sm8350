@@ -17,9 +17,7 @@
 #define SAVE_IN_CSV
 
 #define GOODIX_RESULT_SAVE_PATH		"/data/misc/tp_selftest_data/Test_Data.csv"
-#define GOODIX_TEST_FILE_NAME		"k9d"
-#define GOODIX_TEST_COST		"COST"
-#define GOODIX_TEST_TM		"TM"
+#define GOODIX_TEST_FILE_NAME		"k9"
 #define MAX_DATA_BUFFER				15000
 #define MAX_DRV_NUM					21
 #define MAX_SEN_NUM					42
@@ -425,13 +423,8 @@ static int goodix_init_testlimits(struct goodix_ts_test *ts_test)
 	u32 tx = test_params->drv_num;
 	u32 rx = test_params->sen_num;
 
-	if (ts_core->lockdown_info[1] == 0x42) {
-		sprintf(limit_file, "%s_test_limits_%s.csv", GOODIX_TEST_FILE_NAME,
-			GOODIX_TEST_COST);
-	} else {
-		sprintf(limit_file, "%s_test_limits_%s.csv", GOODIX_TEST_FILE_NAME,
-			GOODIX_TEST_TM);
-	}
+	sprintf(limit_file, "%s_test_limits_%d.csv", GOODIX_TEST_FILE_NAME,
+			ts_core->fw_version.sensor_id);
 	ts_info("limit_file_name:%s.", limit_file);
 
 	ret = request_firmware(&firmware, limit_file, dev);
@@ -2077,7 +2070,8 @@ static int goodix_save_limits(struct goodix_ts_test *ts_test,
 	/* save noise limit */
 	if (ts_test->test_result[GTP_NOISE_TEST]) {
 		bytes += sprintf(&data[bytes], "<Item name=\"Diffdata Test Sets\">\n");
-		bytes += sprintf(&data[bytes], "<TotalFrameCnt>1</TotalFrameCnt>\n");
+		bytes += sprintf(&data[bytes], "<TotalFrameCnt>%d</TotalFrameCnt>\n",
+				NOISEDATA_TEST_TIMES);
 		bytes += sprintf(&data[bytes], "<MaxJitterLimit>%d</MaxJitterLimit>\n",
 				ts_test->test_params.noise_threshold);
 		bytes += sprintf(&data[bytes], "</Item>\n");
@@ -2209,6 +2203,7 @@ save_end:
 static int goodix_save_noise_data(struct goodix_ts_test *ts_test, struct file *fp)
 {
 	int i;
+	int j;
 	int ret = 0;
 	int bytes = 0;
 	s16 stat_result[3];
@@ -2224,21 +2219,31 @@ static int goodix_save_noise_data(struct goodix_ts_test *ts_test, struct file *f
 	}
 
 	bytes += sprintf(&data[bytes], "<DiffDataRecord>\n");
-	goodix_data_cal(ts_test->noisedata[0].data, len, stat_result);
-	bytes += sprintf(&data[bytes],
-		"<DataContent No.=\"0\" DataCount=\"%d\" Maximum=\"%d\" Minimum=\"%d\" Average=\"%d\">\n",
-		len, stat_result[1], stat_result[2], stat_result[0]);
-	for (i = 0; i < len; i++) {
-		bytes += sprintf(&data[bytes], "%d,", ts_test->noisedata[0].data[i]);
-		if ((i + 1) % tx == 0)
-			bytes += sprintf(&data[bytes], "\n");
+	for (i = 0; i < NOISEDATA_TEST_TIMES; i++) {
+		goodix_data_cal(ts_test->noisedata[i].data, len, stat_result);
+		bytes += sprintf(&data[bytes],
+			"<DataContent No.=\"%d\" DataCount=\"%d\" Maximum=\"%d\" Minimum=\"%d\" Average=\"%d\">\n",
+			i, len, stat_result[1], stat_result[2], stat_result[0]);
+		for (j = 0; j < len; j++) {
+			bytes += sprintf(&data[bytes], "%d,", ts_test->noisedata[i].data[j]);
+			if ((j + 1) % tx == 0)
+				bytes += sprintf(&data[bytes], "\n");
+		}
+		bytes += sprintf(&data[bytes], "</DataContent>\n");
+		ret = fs_write(data, bytes, fp);
+		if (ret < 0) {
+			ts_err("noisedata write fail.");
+			goto save_end;
+		}
+		bytes = 0;
 	}
-	bytes += sprintf(&data[bytes], "</DataContent>\n");
+
 	bytes += sprintf(&data[bytes], "</DiffDataRecord>\n");
 	ret = fs_write(data, bytes, fp);
 	if (ret < 0)
 		ts_err("noisedata write fail.");
 
+save_end:
 	kfree(data);
 	return ret;
 }
