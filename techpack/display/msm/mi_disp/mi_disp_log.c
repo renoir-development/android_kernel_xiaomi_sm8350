@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -22,12 +23,9 @@
 #include <linux/freezer.h>
 #include <linux/rtc.h>
 
-#include "mi_disp_config.h"
-#include "mi_disp_log.h"
 #include "mi_disp_print.h"
 #include "mi_disp_core.h"
-
-#if MI_DISP_LOG_ENABLE
+#include "mi_disp_log.h"
 
 #define DISP_LOG_DEVICE_NAME "disp_log"
 
@@ -644,4 +642,3 @@ void mi_disp_log_deinit(void)
 	g_disp_log = NULL;
 }
 
-#endif /* MI_DISP_LOG_ENABLE */

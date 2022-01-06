@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014-2021 The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -2297,7 +2298,7 @@ void sde_crtc_prepare_commit(struct drm_crtc *crtc,
 	dev = crtc->dev;
 	sde_crtc = to_sde_crtc(crtc);
 	cstate = to_sde_crtc_state(crtc->state);
-	SDE_EVT32_VERBOSE(DRMID(crtc), cstate->cwb_enc_mask);
+	SDE_EVT32_VERBOSE(DRMID(crtc));
 
 	SDE_ATRACE_BEGIN("sde_crtc_prepare_commit");
 
@@ -2317,7 +2318,6 @@ void sde_crtc_prepare_commit(struct drm_crtc *crtc,
 
 			cstate->connectors[cstate->num_connectors++] = conn;
 			sde_connector_prepare_fence(conn);
-			sde_encoder_set_clone_mode(encoder, crtc->state);
 		}
 	drm_connector_list_iter_end(&conn_iter);
 
@@ -2380,7 +2380,7 @@ enum sde_intf_mode sde_crtc_get_intf_mode(struct drm_crtc *crtc,
 	drm_for_each_encoder_mask(encoder, crtc->dev,
 			cstate->encoder_mask) {
 		/* continue if copy encoder is encountered */
-		if (sde_crtc_state_in_clone_mode(encoder, cstate))
+		if (sde_encoder_in_clone_mode(encoder))
 			continue;
 
 		return sde_encoder_get_intf_mode(encoder);
@@ -5080,57 +5080,40 @@ end:
 }
 
 /**
- * sde_crtc_get_num_datapath - get the number of layermixers active
- *				on primary connector
+ * sde_crtc_get_num_datapath - get the number of datapath active
+ *				of primary connector
  * @crtc: Pointer to DRM crtc object
- * @virtual_conn: Pointer to DRM connector object of WB in CWB case
- * @crtc_state:	Pointer to DRM crtc state
+ * @connector: Pointer to DRM connector object of WB in CWB case
  */
 int sde_crtc_get_num_datapath(struct drm_crtc *crtc,
-	struct drm_connector *virtual_conn, struct drm_crtc_state *crtc_state)
+		struct drm_connector *connector)
 {
 	struct sde_crtc *sde_crtc = to_sde_crtc(crtc);
-	struct drm_connector *conn, *primary_conn = NULL;
 	struct sde_connector_state *sde_conn_state = NULL;
+	struct drm_connector *conn;
 	struct drm_connector_list_iter conn_iter;
-	int num_lm = 0;
 
-	if (!sde_crtc || !virtual_conn || !crtc_state) {
+	if (!sde_crtc || !connector) {
 		SDE_DEBUG("Invalid argument\n");
 		return 0;
 	}
 
-	/* return num_mixers used for primary when available in sde_crtc */
 	if (sde_crtc->num_mixers)
 		return sde_crtc->num_mixers;
 
 	drm_connector_list_iter_begin(crtc->dev, &conn_iter);
 	drm_for_each_connector_iter(conn, &conn_iter) {
-		if ((drm_connector_mask(conn) & crtc_state->connector_mask)
-			 && conn != virtual_conn) {
+		if (conn->state && conn->state->crtc == crtc &&
+				 conn != connector)
 			sde_conn_state = to_sde_connector_state(conn->state);
-			primary_conn = conn;
-			break;
-		}
 	}
+
 	drm_connector_list_iter_end(&conn_iter);
 
-	/* if primary sde_conn_state has mode info available, return num_lm from here */
 	if (sde_conn_state)
-		num_lm = sde_conn_state->mode_info.topology.num_lm;
+		return sde_conn_state->mode_info.topology.num_lm;
 
-	/* if PM resume occurs with CWB enabled, retrieve num_lm from primary dsi panel mode */
-	if (primary_conn && !num_lm) {
-		num_lm = sde_connector_get_lm_cnt_from_topology(primary_conn,
-				&crtc_state->adjusted_mode);
-		if (num_lm < 0) {
-			SDE_DEBUG("lm cnt fail for conn:%d num_lm:%d\n",
-					 primary_conn->base.id, num_lm);
-			num_lm = 0;
-		}
-	}
-
-	return num_lm;
+	return 0;
 }
 
 int sde_crtc_vblank(struct drm_crtc *crtc, bool en)

@@ -14,14 +14,12 @@
 #include <linux/firmware.h>
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
-#include <drm/drm_mipi_dsi.h>
 
 #include "msm_drv.h"
 #include "dsi_defs.h"
 #include "dsi_ctrl.h"
 #include "dsi_phy.h"
 #include "dsi_panel.h"
-#include <video/mipi_display.h>
 
 #define MAX_DSI_CTRLS_PER_DISPLAY             2
 #define DSI_CLIENT_NAME_SIZE		20
@@ -429,14 +427,6 @@ int dsi_display_get_default_lms(void *dsi_display, u32 *num_lm);
  */
 int dsi_display_get_qsync_min_fps(void *dsi_display, u32 mode_fps);
 
-/**
- * dsi_conn_get_lm_from_mode() - retrieves LM count from dsi mode priv info
- * @display:            Handle to display.
- * @mode:               Pointer to DRM mode structure
- *
- * Return: LM count from dsi panel topology
- */
-int dsi_conn_get_lm_from_mode(void *dsi_display, const struct drm_display_mode *mode);
 
 /**
  * dsi_display_find_mode() - retrieve cached DSI mode given relevant params

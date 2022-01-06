@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -300,22 +301,20 @@ static void mi_disp_set_doze_brightness_work_handler(struct kthread_work *work)
 		DISP_INFO("%s pending_doze_cnt = %d\n",
 			display->display_type, atomic_read(&dd_ptr->pending_doze_cnt));
 		if (doze_brightness == DOZE_TO_NORMAL) {
-			ret = wait_event_interruptible(*(cur_work->wq),
+			ret = wait_event_freezable(*(cur_work->wq),
 				dsi_panel_initialized(display->panel));
 			if (ret) {
+				DISP_INFO("wait_event_freezable ret = %d\n", ret);
 				/* Some event woke us up, so let's quit */
-				DISP_INFO("wait_event_interruptible ret = %d\n", ret);
-				atomic_add_unless(&dd_ptr->pending_doze_cnt, -1, 0);
 				goto exit;
 			}
 			mi_dsi_display_set_doze_brightness(dd_ptr->display, doze_brightness);
 		} else {
-			ret = wait_event_interruptible(*(cur_work->wq),
+			ret = wait_event_freezable(*(cur_work->wq),
 				is_aod_and_panel_initialized(display->panel));
 			if (ret) {
+				DISP_INFO("wait_event_freezable ret = %d\n", ret);
 				/* Some event woke us up, so let's quit */
-				DISP_INFO("wait_event_interruptible ret = %d\n", ret);
-				atomic_add_unless(&dd_ptr->pending_doze_cnt, -1, 0);
 				goto exit;
 			}
 			mi_dsi_display_set_doze_brightness(dd_ptr->display, doze_brightness);
@@ -769,55 +768,6 @@ static int mi_disp_ioctl_get_brightness(
 	return ret;
 }
 
-int mi_disp_ioctl_get_bic_data(struct disp_feature_client *client, void *data)
-{
-	struct dsi_display *dsi_display = NULL;
-	struct disp_feature *df = client->df;
-	struct disp_bic_info_req *req = data;
-	u32 disp_id = req->base.disp_id;
-	struct disp_display *dd_ptr = NULL;
-	char * bic_data = NULL;
-	char *bic_reg = NULL;
-	int len = 0;
-	int ret = 0;
-
-	ret = mutex_lock_interruptible(&client->event_lock);
-	if (ret)
-		return ret;
-
-	dd_ptr = &df->d_display[disp_id];
-	dsi_display = (struct dsi_display *)dd_ptr->display;
-	DISP_INFO("req->type == %d\n", req->type);
-
-	if (is_support_disp_id(disp_id)) {
-		if (req->type == 0) {
-			bic_data = mi_dsi_display_get_bic_data_info(dd_ptr->display, &len);
-			DISP_INFO("bic data len = %d\n", len);
-			if (req->bic_ptr && len) {
-				req->bic_len = len;
-				ret = copy_to_user(req->bic_ptr, bic_data, len);
-				if (ret != 0) {
-					DISP_INFO("copy to user failed, ret = %d\n", ret);
-					ret = -EFAULT;
-				}
-			}
-		} else if (req->type == 1) {
-			DISP_INFO("req->bic_reg_len == %d\n", req->bic_reg_len);
-			if (req->bic_reg_len) {
-				bic_reg = mi_dsi_display_get_bic_reg_data_array(dd_ptr->display);
-				if (copy_from_user((void __user *)bic_reg, req->bic_reg_ptr, req->bic_reg_len)) {
-					ret = -EFAULT;
-				} else {
-					dsi_display->panel->mi_cfg.nvt_bic_reg_transfer_finshed = true;
-				}
-			}
-		}
-	}
-	mutex_unlock(&client->event_lock);
-
-	return ret;
-}
-
 
 /* Ioctl table */
 static const struct disp_ioctl_desc disp_ioctls[] = {
@@ -833,7 +783,6 @@ static const struct disp_ioctl_desc disp_ioctls[] = {
 	DISP_IOCTL_DEF(MI_DISP_IOCTL_WRITE_DSI_CMD, mi_disp_ioctl_write_dsi_cmd),
 	DISP_IOCTL_DEF(MI_DISP_IOCTL_READ_DSI_CMD, mi_disp_ioctl_read_dsi_cmd),
 	DISP_IOCTL_DEF(MI_DISP_IOCTL_GET_BRIGHTNESS, mi_disp_ioctl_get_brightness),
-	DISP_IOCTL_DEF(MI_DISP_IOCTL_GET_BIC, mi_disp_ioctl_get_bic_data),
 };
 
 #define MI_DISP_IOCTL_COUNT	ARRAY_SIZE(disp_ioctls)

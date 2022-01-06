@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014-2021, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -1752,8 +1753,6 @@ static int _sde_kms_setup_displays(struct drm_device *dev,
 		.install_properties = NULL,
 		.set_allowed_mode_switch = dsi_conn_set_allowed_mode_switch,
 		.get_qsync_min_fps = dsi_display_get_qsync_min_fps,
-		.prepare_commit = dsi_conn_prepare_commit,
-		.get_num_lm_from_mode = dsi_conn_get_lm_from_mode,
 	};
 	static const struct sde_connector_ops wb_ops = {
 		.post_init =    sde_wb_connector_post_init,
@@ -3259,10 +3258,9 @@ static int sde_kms_cont_splash_config(struct msm_kms *kms,
 	return rc;
 }
 
-static bool sde_kms_check_for_splash(struct msm_kms *kms, struct drm_crtc *crtc)
+static bool sde_kms_check_for_splash(struct msm_kms *kms)
 {
 	struct sde_kms *sde_kms;
-	struct drm_encoder *encoder;
 
 	if (!kms) {
 		SDE_ERROR("invalid kms\n");
@@ -3270,16 +3268,7 @@ static bool sde_kms_check_for_splash(struct msm_kms *kms, struct drm_crtc *crtc)
 	}
 
 	sde_kms = to_sde_kms(kms);
-	if (!crtc || !sde_kms->splash_data.num_splash_displays)
-		return sde_kms->splash_data.num_splash_displays;
-
-	drm_for_each_encoder_mask(encoder, crtc->dev,
-		crtc->state->encoder_mask) {
-		if (sde_encoder_in_cont_splash(encoder))
-			return true;
-	}
-
-	return false;
+	return sde_kms->splash_data.num_splash_displays;
 }
 
 static int sde_kms_get_mixer_count(const struct msm_kms *kms,

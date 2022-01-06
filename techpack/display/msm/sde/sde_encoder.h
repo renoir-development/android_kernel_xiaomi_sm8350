@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2020, The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -486,11 +486,12 @@ int sde_encoder_display_failure_notification(struct drm_encoder *enc,
 bool sde_encoder_recovery_events_enabled(struct drm_encoder *encoder);
 
 /**
- * sde_encoder_enable_recovery_event - handler to enable the sw recovery
- * for this connector
+ * sde_encoder_recovery_events_handler - handler to enable/disable the
+ * sw recovery for this connector
  * @drm_enc:    Pointer to drm encoder structure
  */
-void sde_encoder_enable_recovery_event(struct drm_encoder *encoder);
+void sde_encoder_recovery_events_handler(struct drm_encoder *encoder,
+		bool val);
 /**
  * sde_encoder_in_clone_mode - checks if underlying phys encoder is in clone
  *	mode or independent display mode. ref@ WB in Concurrent writeback mode.
@@ -498,14 +499,6 @@ void sde_encoder_enable_recovery_event(struct drm_encoder *encoder);
  * @Return:     true if successful in updating the encoder structure
  */
 bool sde_encoder_in_clone_mode(struct drm_encoder *enc);
-
-/**
- * sde_encoder_set_clone_mode - cwb in wb phys enc is enabled.
- * drm_enc:	Pointer to drm encoder structure
- * drm_crtc_state:	Pointer to drm_crtc_state
- */
-void sde_encoder_set_clone_mode(struct drm_encoder *drm_enc,
-	 struct drm_crtc_state *crtc_state);
 
 /*
  * sde_encoder_is_cwb_disabling - check if cwb encoder disable is pending
