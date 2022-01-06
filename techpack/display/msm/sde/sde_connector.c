@@ -454,6 +454,20 @@ static void sde_connector_get_avail_res_info(struct drm_connector *conn,
 	avail_res->max_mixer_width = sde_kms->catalog->max_mixer_width;
 }
 
+int sde_connector_get_lm_cnt_from_topology(struct drm_connector *conn,
+		const struct drm_display_mode *drm_mode)
+{
+	struct sde_connector *c_conn;
+
+	c_conn = to_sde_connector(conn);
+
+	if (!c_conn || c_conn->connector_type != DRM_MODE_CONNECTOR_DSI ||
+		!c_conn->ops.get_num_lm_from_mode)
+		return -EINVAL;
+
+	return c_conn->ops.get_num_lm_from_mode(c_conn->display, drm_mode);
+}
+
 int sde_connector_get_mode_info(struct drm_connector *conn,
 		const struct drm_display_mode *drm_mode,
 		struct msm_mode_info *mode_info)
@@ -892,6 +906,8 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 
 	SDE_EVT32_VERBOSE(connector->base.id);
 
+	mi_sde_connector_gir_fence(connector);
+
 	mi_sde_connector_fod_hbm_fence(connector);
 
 	rc = c_conn->ops.pre_kickoff(connector, c_conn->display, &params);
@@ -1002,9 +1018,12 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 	 */
 	if (display->panel->bl_config.bl_update ==
 				BL_UPDATE_DELAY_UNTIL_FIRST_FRAME) {
-		if (!c_conn->allow_bl_update)
+		if (!c_conn->allow_bl_update) {
 			sde_encoder_wait_for_event(c_conn->encoder,
 					MSM_ENC_TX_COMPLETE);
+			SDE_INFO("[%s]show first frame done, bl:%d\n",
+				display->panel->name, c_conn->unset_bl_level);
+		}
 	}
 	c_conn->allow_bl_update = true;
 
@@ -2470,6 +2489,7 @@ void _sde_connector_report_panel_dead(struct sde_connector *conn,
 		skip_pre_kickoff);
 
 	conn->panel_dead = true;
+
 	event.type = DRM_EVENT_PANEL_DEAD;
 	event.length = sizeof(bool);
 	msm_mode_object_event_notify(&conn->base.base,
@@ -3078,8 +3098,7 @@ error_free_conn:
 	return ERR_PTR(rc);
 }
 
-static int _sde_conn_hw_recovery_handler(
-		struct drm_connector *connector, bool val)
+static int _sde_conn_enable_hw_recovery(struct drm_connector *connector)
 {
 	struct sde_connector *c_conn;
 
@@ -3090,7 +3109,7 @@ static int _sde_conn_hw_recovery_handler(
 	c_conn = to_sde_connector(connector);
 
 	if (c_conn->encoder)
-		sde_encoder_recovery_events_handler(c_conn->encoder, val);
+		sde_encoder_enable_recovery_event(c_conn->encoder);
 
 	return 0;
 }
@@ -3108,7 +3127,7 @@ int sde_connector_register_custom_event(struct sde_kms *kms,
 		ret = 0;
 		break;
 	case DRM_EVENT_SDE_HW_RECOVERY:
-		ret = _sde_conn_hw_recovery_handler(conn_drm, val);
+		ret = _sde_conn_enable_hw_recovery(conn_drm);
 		break;
 	default:
 		break;

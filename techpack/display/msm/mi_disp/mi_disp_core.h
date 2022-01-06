@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -12,8 +11,6 @@
 #include <linux/cdev.h>
 #include <linux/proc_fs.h>
 #include <linux/debugfs.h>
-
-#include "mi_disp_config.h"
 
 #define MI_DISPLAY_CLASS  "mi_display"
 #define MI_DISPLAY_PROCFS_DIR  "mi_display"

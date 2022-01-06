@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -12,10 +11,13 @@
 #include <linux/seq_file.h>
 
 #include <drm/mi_disp.h>
+#include "mi_disp_config.h"
 #include "mi_disp_print.h"
 #include "mi_disp_core.h"
 #include "mi_disp_feature.h"
 #include "mi_dsi_display.h"
+
+#if MI_DISP_PROCFS_ENABLE
 
 const char *mipi_rw_str[MI_DISP_MAX] = {
 	[MI_DISP_PRIMARY] = "mipi_rw_prim",
@@ -283,3 +285,4 @@ int mi_disp_procfs_deinit(void *d_display, int disp_id)
 	return ret;
 }
 
+#endif /* MI_DISP_PROCFS_ENABLE */

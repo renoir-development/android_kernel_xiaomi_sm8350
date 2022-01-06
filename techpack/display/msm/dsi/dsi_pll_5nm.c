@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #define pr_fmt(fmt)	"%s: " fmt, __func__
@@ -492,7 +493,7 @@ static void dsi_pll_config_slave(struct dsi_pll_resource *rsc)
 	rsc->slave = NULL;
 
 	if (!orsc) {
-		pr_warn("slave PLL unavilable, assuming standalone config\n");
+		pr_debug("slave PLL unavilable, assuming standalone config\n");
 		return;
 	}
 
