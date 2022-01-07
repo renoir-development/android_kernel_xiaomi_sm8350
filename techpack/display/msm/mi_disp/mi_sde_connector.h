@@ -1,15 +1,15 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
 #ifndef _MI_SDE_CONNECTOR_H_
 #define _MI_SDE_CONNECTOR_H_
 
-#include "mi_disp_config.h"
 #include "drm_connector.h"
+
+#include "mi_disp_config.h"
 
 struct sde_connector;
 
@@ -48,6 +48,7 @@ int mi_sde_connector_panel_ctl(struct drm_connector *connector, uint32_t op_code
 void mi_sde_connector_update_layer_state(struct drm_connector *connector,
 	enum mi_layer_type mi_layer_type);
 
+int mi_sde_connector_gir_fence(struct drm_connector *connector);
 int mi_sde_connector_fod_hbm_fence(struct drm_connector *connector);
 
 void mi_sde_connector_fod_notify(struct drm_connector *conn);

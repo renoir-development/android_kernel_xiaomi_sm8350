@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 #include <linux/err.h>
@@ -51,8 +50,13 @@ static int mi_sde_cdev_set_cur_brightness(struct thermal_cooling_device *cdev,
 	if (brightness_lvl == mi_sde_cdev->sde_cdev.thermal_state)
 		return 0;
 	disp_cdev->thermal_state = brightness_lvl;
-	blocking_notifier_call_chain(&disp_cdev->notifier_head,
-					brightness_lvl, (void *)disp_cdev->bd);
+	if (mi_sde_cdev->panel->mi_cfg.thermal_dimming) {
+		sysfs_notify(&cdev->device.kobj, NULL, "cur_state");
+		pr_info("thermal dimming:set thermal_brightness_limit to %d\n", brightness_lvl);
+	} else {
+		blocking_notifier_call_chain(&disp_cdev->notifier_head,
+						brightness_lvl, (void *)disp_cdev->bd);
+	}
 
 	return 0;
 }
