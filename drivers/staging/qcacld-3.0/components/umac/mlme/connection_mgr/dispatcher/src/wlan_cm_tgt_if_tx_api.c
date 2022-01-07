@@ -156,6 +156,7 @@ end:
 }
 #endif
 
+#ifdef ROAM_OFFLOAD_V1
 #if defined(WLAN_FEATURE_HOST_ROAM) || defined(WLAN_FEATURE_ROAM_OFFLOAD)
 QDF_STATUS wlan_cm_tgt_send_roam_offload_init(struct wlan_objmgr_psoc *psoc,
 					      uint8_t vdev_id, bool is_init)
@@ -416,3 +417,4 @@ QDF_STATUS wlan_cm_tgt_send_roam_disable_config(struct wlan_objmgr_psoc *psoc,
 
 	return status;
 }
+#endif

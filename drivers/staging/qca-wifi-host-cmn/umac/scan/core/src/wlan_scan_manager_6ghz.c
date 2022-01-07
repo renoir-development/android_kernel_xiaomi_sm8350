@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -54,7 +54,7 @@ scm_sort_6ghz_channel_list(struct wlan_objmgr_vdev *vdev,
 	uint8_t i, j = 0, max, tmp_list_count;
 	struct meta_rnr_channel *channel;
 	struct chan_info temp_list[MAX_6GHZ_CHANNEL];
-	struct rnr_chan_weight *rnr_chan_info, temp;
+	struct rnr_chan_weight *rnr_chan_info, *temp;
 	uint32_t weight;
 	struct wlan_objmgr_psoc *psoc;
 
@@ -66,7 +66,7 @@ scm_sort_6ghz_channel_list(struct wlan_objmgr_vdev *vdev,
 
 	for (i = 0; i < chan_list->num_chan; i++)
 		if (WLAN_REG_IS_6GHZ_CHAN_FREQ(chan_list->chan[i].freq))
-			temp_list[j++] = chan_list->chan[i];
+			temp_list[j++].freq = chan_list->chan[i].freq;
 
 	tmp_list_count = j;
 	scm_debug("Total 6ghz channels %d", tmp_list_count);
@@ -75,7 +75,7 @@ scm_sort_6ghz_channel_list(struct wlan_objmgr_vdev *vdev,
 	if (tmp_list_count <= 1)
 		return;
 
-	rnr_chan_info = qdf_mem_malloc(sizeof(*rnr_chan_info) * tmp_list_count);
+	rnr_chan_info = qdf_mem_malloc(sizeof(rnr_chan_info) * tmp_list_count);
 	if (!rnr_chan_info)
 		return;
 
@@ -88,8 +88,6 @@ scm_sort_6ghz_channel_list(struct wlan_objmgr_vdev *vdev,
 			 channel->saved_profile_count * SAVED_PROFILE_WEIGHTAGE;
 		rnr_chan_info[j].weight = weight;
 		rnr_chan_info[j].chan_freq = temp_list[i].freq;
-		rnr_chan_info[j].phymode = temp_list[i].phymode;
-		rnr_chan_info[j].flags = temp_list[i].flags;
 		j++;
 		/*
 		 * Log the info only if weight or bss_beacon_probe_count are
@@ -121,11 +119,8 @@ scm_sort_6ghz_channel_list(struct wlan_objmgr_vdev *vdev,
 
 	/* update the 6g list based on the weightage */
 	for (i = 0, j = 0; (i < NUM_CHANNELS && j < tmp_list_count); i++)
-		if (wlan_reg_is_6ghz_chan_freq(chan_list->chan[i].freq)) {
-			chan_list->chan[i].freq = rnr_chan_info[j].chan_freq;
-			chan_list->chan[i].flags = rnr_chan_info[j].flags;
-			chan_list->chan[i].phymode = rnr_chan_info[j++].phymode;
-		}
+		if (wlan_reg_is_6ghz_chan_freq(chan_list->chan[i].freq))
+			chan_list->chan[i].freq = rnr_chan_info[j++].chan_freq;
 
 	qdf_mem_free(rnr_chan_info);
 }
@@ -237,21 +232,13 @@ scm_is_full_scan_by_userspace(struct chan_list *chan_list)
 	return (chan_list->num_chan >= FULL_SCAN_CH_COUNT_MIN_BY_USERSPACE);
 }
 
-static inline bool
-scm_is_scan_type_exempted_from_optimization(struct scan_start_request *req)
-{
-	/* Dont modify the channel list for RRM type*/
-	return (req->scan_req.scan_type == SCAN_TYPE_RRM);
-}
-
 static void
 scm_copy_valid_channels(struct wlan_objmgr_psoc *psoc,
 			enum scan_mode_6ghz scan_mode,
-			struct scan_start_request *req,
+			struct chan_list *chan_list,
 			uint8_t *num_scan_ch)
 {
 	uint8_t i, num_ch = *num_scan_ch;
-	struct chan_list *chan_list = &req->scan_req.chan_list;
 	qdf_freq_t freq;
 
 	switch (scan_mode) {
@@ -266,12 +253,10 @@ scm_copy_valid_channels(struct wlan_objmgr_psoc *psoc,
 	case SCAN_MODE_6G_PSC_CHANNEL:
 	case SCAN_MODE_6G_PSC_DUTY_CYCLE:
 		/*
-		 * Filter out non-PSC 6g channels if firmware doesn't
-		 * supports RNR_ONLY scan flag/feature and the scan type is
-		 * allowed to be optimized.
+		 * Don't add non-PSC 6g channels if firmware doesn't
+		 * support RNR_ONLY scan flag/feature.
 		 */
-		if (!scm_is_6ghz_scan_optimization_supported(psoc) &&
-		    !scm_is_scan_type_exempted_from_optimization(req)) {
+		if (!scm_is_6ghz_scan_optimization_supported(psoc)) {
 			for (i = 0; i < chan_list->num_chan; i++) {
 				freq = chan_list->chan[i].freq;
 				if (!wlan_reg_is_6ghz_chan_freq(freq) ||
@@ -355,12 +340,10 @@ scm_update_6ghz_channel_list(struct scan_start_request *req,
 	enum scan_mode_6ghz scan_mode;
 	uint8_t num_scan_ch = 0;
 	enum QDF_OPMODE op_mode;
-	struct wlan_objmgr_psoc *psoc;
 
 	pdev = wlan_vdev_get_pdev(vdev);
 	if (!pdev)
 		return;
-	psoc = wlan_pdev_get_psoc(pdev);
 
 	/* Dont update the channel list for not STA mode */
 	op_mode = wlan_vdev_mlme_get_opmode(req->vdev);
@@ -376,21 +359,20 @@ scm_update_6ghz_channel_list(struct scan_start_request *req,
 	/*
 	 * Host has learned RNR info/channels from previous scan. Add them to
 	 * the scan request and don't set RNR_ONLY flag to scan them without
-	 * optimization. Don't add RNR info if the scan type is exempted from
 	 * optimization.
 	 */
 	if (scan_mode != SCAN_MODE_6G_NO_CHANNEL &&
-	    scm_is_full_scan_by_userspace(chan_list) &&
-	    !scm_is_scan_type_exempted_from_optimization(req))
+	    scm_is_full_scan_by_userspace(chan_list))
 		scm_add_rnr_info(pdev, req);
 
 	/* copy all the channels given by userspace */
-	scm_copy_valid_channels(psoc, scan_mode, req, &num_scan_ch);
+	scm_copy_valid_channels(wlan_pdev_get_psoc(pdev), scan_mode, chan_list,
+				&num_scan_ch);
 
 	/* No more optimizations are needed in the below cases */
 	if (!scm_is_full_scan_by_userspace(chan_list) ||
-	    !scm_is_6ghz_scan_optimization_supported(psoc) ||
-	    scm_is_scan_type_exempted_from_optimization(req))
+	    !scm_is_6ghz_scan_optimization_supported(
+				wlan_pdev_get_psoc(pdev)))
 		goto end;
 
 	switch (scan_mode) {

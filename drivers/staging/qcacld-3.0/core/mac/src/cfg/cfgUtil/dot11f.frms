@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2006-2007, 2014-2018, 2020-2021 The Linux Foundation.
+ * Copyright (c) 2006-2007, 2014-2018, 2020 The Linux Foundation.
  * All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
@@ -114,7 +114,7 @@ const EID_AID                        =  197;
 const EID_EXT_CAP           	     =  127;
 const EID_OPERATING_MODE             =  199;
 const EID_WIDER_BW_CHANNEL_SWITCH_ANN=  194;
-const EID_TRANSMIT_POWER_ENVELOPE    = 195;
+const VHT_TRANSMIT_POWER_ENVELOPE    = 195;
 const EID_CHANNEL_SWITCH_WRAPPER     = 196;
 const EID_VENDOR_SPECIFIC            = 221;
 const EID_FILS_INDICATION            = 240;
@@ -1332,8 +1332,7 @@ IE RequestedInfo (EID_REQUEST)            // 7.3.2.12
 IE Country (EID_COUNTRY)                  // 7.3.2.9
 {
     country[3];
-    first_triplet[3];
-    OPTIONAL more_triplets[3][0..80];
+    OPTIONAL triplets[3][0..84];
 }
 
 IE FHParams (EID_FH_PATTERN)              // 7.3.2.10
@@ -2449,20 +2448,15 @@ IE WiderBWChanSwitchAnn (EID_WIDER_BW_CHANNEL_SWITCH_ANN)
    newCenterChanFreq1,    1;
 }
 
-IE transmit_power_env (EID_TRANSMIT_POWER_ENVELOPE)
+IE vht_transmit_power_env (VHT_TRANSMIT_POWER_ENVELOPE)
 {
-    {
-        max_tx_pwr_count:             3;
-        max_tx_pwr_interpret:         3;
-        max_tx_pwr_category:          2;
-    }
-    tx_power[1..8];
+    bytes[2..5];
 }
 
 IE ChannelSwitchWrapper (EID_CHANNEL_SWITCH_WRAPPER)
 {
     OPTIE IE  WiderBWChanSwitchAnn;
-    OPTIE IE  transmit_power_env;
+    OPTIE IE  vht_transmit_power_env;
 }
 IE ExtCap (EID_EXT_CAP)
 {
@@ -2930,9 +2924,32 @@ IE tclas_mask (EID_EXTN_ID_ELEMENT) OUI (0x59)
     classifier_mask, 1;
     UNION info (DISCRIMINATOR classifier_type)
     {
-        ip_param (classifier_type IS 4)
+        IpParams (classifier_type IS 4)
         {
-            reserved[16];
+            version, 1;
+            UNION params (DISCRIMINATOR version)
+            {
+                IpV4Params (version IS 4)
+                {
+                    source[4];
+                    dest[4];
+                    src_port, 2;
+                    dest_port, 2;
+                    DSCP, 1;
+                    proto, 1;
+                    reserved, 1;
+                }
+                IpV6Params (version IS 6)
+                {
+                    source[16];
+                    dest[16];
+                    src_port, 2;
+                    dest_port, 2;
+                    DSCP, 1;
+                    next_header, 1;
+                    flow_label[3];
+                }
+            };
         }
     };
 }
@@ -3117,8 +3134,7 @@ IE he_op (EID_EXTN_ID_ELEMENT) OUI (0x24)
             { // control
                 ch_width: 2;
                 dup_bcon: 1;
-                reg_info: 3;
-                reserved: 2;
+                reserved: 5;
             }
             center_freq_seg0, 1;
             center_freq_seg1, 1;
@@ -3589,7 +3605,6 @@ FRAME Beacon                              // C.f. Sec. 7.2.3.1
     OPTIE  P2PBeacon;
     OPTIE  VHTCaps;
     OPTIE  VHTOperation;
-    OPTIE  transmit_power_env[0..8];
     OPTIE  VHTExtBssLoad;
     OPTIE  ExtCap;
     OPTIE  OperatingMode;
@@ -3686,7 +3701,7 @@ FRAME Beacon2
     OPTIE  P2PBeacon;
     OPTIE  VHTCaps;
     OPTIE  VHTOperation;
-    OPTIE  transmit_power_env[0..8];
+    OPTIE  vht_transmit_power_env;
     OPTIE  ChannelSwitchWrapper;
     OPTIE  VHTExtBssLoad;
     OPTIE  ExtCap;
@@ -3759,7 +3774,6 @@ FRAME BeaconIEs
     OPTIE  P2PBeaconProbeRes;
     OPTIE  VHTCaps;
     OPTIE  VHTOperation;
-    OPTIE  transmit_power_env[0..8];
     OPTIE  VHTExtBssLoad;
     OPTIE  ExtCap;
     OPTIE  OperatingMode;
@@ -4024,7 +4038,7 @@ FRAME ProbeResponse                       // 7.2.3.9
 
     OPTIE  VHTCaps;
     OPTIE  VHTOperation;
-    OPTIE  transmit_power_env[0..8];
+    OPTIE  vht_transmit_power_env;
     OPTIE  ChannelSwitchWrapper;
     OPTIE  VHTExtBssLoad;
     OPTIE  ExtCap;
@@ -4068,7 +4082,6 @@ FRAME DeAuth                              // 7.2.3.11
     FF    Reason;
     OPTIE P2PDeAuth;
 }
-
 
 FRAME AddTSRequest                        // 7.4.2.1
 {
@@ -4298,7 +4311,6 @@ FRAME TDLSDisRsp
     OPTIE  ht2040_bss_coexistence;
     MANDIE LinkIdentifier;
     OPTIE  VHTCaps;
-    OPTIE  he_cap;
 }
 
 FRAME TDLSSetupReq
@@ -4324,7 +4336,6 @@ FRAME TDLSSetupReq
     OPTIE  WMMInfoStation;
     OPTIE  AID;
     OPTIE  VHTCaps;
-    OPTIE  he_cap;
 }
 
 FRAME TDLSSetupRsp
@@ -4352,7 +4363,6 @@ FRAME TDLSSetupRsp
     OPTIE  AID;
     OPTIE  VHTCaps;
     OPTIE  OperatingMode;
-    OPTIE  he_cap;
 }
 
 FRAME TDLSSetupCnf
@@ -4370,7 +4380,6 @@ FRAME TDLSSetupCnf
     OPTIE  WMMParams;
     OPTIE  VHTOperation;
     OPTIE  OperatingMode;
-    OPTIE  he_op;
 }
 FRAME TDLSTeardown
 {

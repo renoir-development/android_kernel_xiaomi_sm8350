@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -120,12 +120,6 @@ static inline int pld_ipci_smmu_map(struct device *dev, phys_addr_t paddr,
 	return 0;
 }
 
-static inline int pld_ipci_smmu_unmap(struct device *dev,
-				      uint32_t iova_addr, size_t size)
-{
-	return 0;
-}
-
 static inline int pld_ipci_force_wake_request(struct device *dev)
 {
 	return 0;
@@ -183,25 +177,6 @@ static inline int pld_ipci_get_thermal_state(struct device *dev,
 }
 
 static inline int pld_ipci_exit_power_save(struct device *dev)
-{
-	return 0;
-}
-
-static inline int pld_ipci_prevent_l1(struct device *dev)
-{
-	return 0;
-}
-
-static inline void pld_ipci_allow_l1(struct device *dev)
-{
-}
-
-static inline int pld_ipci_mhi_state(struct device *dev)
-{
-	return 0;
-}
-
-static inline int pld_ipci_is_pci_ep_awake(struct device *dev)
 {
 	return 0;
 }
@@ -282,21 +257,6 @@ static inline int pld_ipci_smmu_map(struct device *dev, phys_addr_t paddr,
 	return icnss_smmu_map(dev, paddr, iova_addr, size);
 }
 
-#ifdef CONFIG_SMMU_S1_UNMAP
-static inline int pld_ipci_smmu_unmap(struct device *dev,
-				      uint32_t iova_addr, size_t size)
-{
-	return icnss_smmu_unmap(dev, iova_addr, size);
-}
-
-#else
-static inline int pld_ipci_smmu_unmap(struct device *dev,
-				      uint32_t iova_addr, size_t size)
-{
-	return 0;
-}
-#endif
-
 static inline int pld_ipci_force_wake_request(struct device *dev)
 {
 	return icnss_force_wake_request(dev);
@@ -357,26 +317,6 @@ static inline int pld_ipci_get_thermal_state(struct device *dev,
 static inline int pld_ipci_exit_power_save(struct device *dev)
 {
 	return icnss_exit_power_save(dev);
-}
-
-static inline int pld_ipci_prevent_l1(struct device *dev)
-{
-	return icnss_prevent_l1(dev);
-}
-
-static inline void pld_ipci_allow_l1(struct device *dev)
-{
-	icnss_allow_l1(dev);
-}
-
-static inline int pld_ipci_is_pci_ep_awake(struct device *dev)
-{
-	return icnss_is_pci_ep_awake(dev);
-}
-
-static inline int pld_ipci_mhi_state(struct device *dev)
-{
-	return icnss_get_mhi_state(dev);
 }
 #endif
 #endif

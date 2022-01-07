@@ -41,12 +41,6 @@
 #include "dp_hist.h"
 #endif
 
-#ifdef REO_QDESC_HISTORY
-#define REO_QDESC_HISTORY_SIZE 512
-uint64_t reo_qdesc_history_idx;
-struct reo_qdesc_event reo_qdesc_history[REO_QDESC_HISTORY_SIZE];
-#endif
-
 #ifdef FEATURE_WDS
 static inline bool
 dp_peer_ast_free_in_unmap_supported(struct dp_soc *soc,
@@ -73,42 +67,6 @@ dp_peer_ast_free_in_unmap_supported(struct dp_soc *soc,
 {
 	return false;
 }
-#endif
-
-#ifdef REO_QDESC_HISTORY
-static inline void
-dp_rx_reo_qdesc_history_add(struct reo_desc_list_node *free_desc,
-			    enum reo_qdesc_event_type type)
-{
-	struct reo_qdesc_event *evt;
-	struct dp_rx_tid *rx_tid = &free_desc->rx_tid;
-	uint32_t idx;
-
-	reo_qdesc_history_idx++;
-	idx = (reo_qdesc_history_idx & (REO_QDESC_HISTORY_SIZE - 1));
-
-	evt = &reo_qdesc_history[idx];
-
-	qdf_mem_copy(evt->peer_mac, free_desc->peer_mac, QDF_MAC_ADDR_SIZE);
-	evt->qdesc_addr = rx_tid->hw_qdesc_paddr;
-	evt->ts = qdf_get_log_timestamp();
-	evt->type = type;
-}
-
-#define DP_RX_REO_QDESC_GET_MAC(freedesc, peer) \
-	qdf_mem_copy(freedesc->peer_mac, peer->mac_addr.raw, QDF_MAC_ADDR_SIZE)
-
-#define DP_RX_REO_QDESC_UPDATE_EVT(free_desc) \
-	dp_rx_reo_qdesc_history_add((free_desc), REO_QDESC_UPDATE_CB)
-
-#define DP_RX_REO_QDESC_FREE_EVT(free_desc) \
-	dp_rx_reo_qdesc_history_add((free_desc), REO_QDESC_FREE)
-#else
-#define DP_RX_REO_QDESC_GET_MAC(freedesc, peer)
-
-#define DP_RX_REO_QDESC_UPDATE_EVT(free_desc)
-
-#define DP_RX_REO_QDESC_FREE_EVT(free_desc)
 #endif
 
 static inline void
@@ -1223,12 +1181,12 @@ void dp_peer_unlink_ast_entry(struct dp_soc *soc,
 			      struct dp_peer *peer)
 {
 	if (!peer) {
-		dp_info_rl("NULL peer");
+		dp_err_rl("NULL peer");
 		return;
 	}
 
 	if (ast_entry->peer_id == HTT_INVALID_PEER) {
-		dp_info_rl("Invalid peer id in AST entry mac addr:"QDF_MAC_ADDR_FMT" type:%d",
+		dp_err_rl("Invalid peer id in AST entry mac addr:"QDF_MAC_ADDR_FMT" type:%d",
 			  QDF_MAC_ADDR_REF(ast_entry->mac_addr.raw),
 			  ast_entry->type);
 		return;
@@ -1270,12 +1228,12 @@ void dp_peer_del_ast(struct dp_soc *soc, struct dp_ast_entry *ast_entry)
 	struct dp_peer *peer = NULL;
 
 	if (!ast_entry) {
-		dp_info_rl("NULL AST entry");
+		dp_err_rl("NULL AST entry");
 		return;
 	}
 
 	if (ast_entry->delete_in_progress) {
-		dp_info_rl("AST entry deletion in progress mac addr:"QDF_MAC_ADDR_FMT" type:%d",
+		dp_err_rl("AST entry deletion in progress mac addr:"QDF_MAC_ADDR_FMT" type:%d",
 			  QDF_MAC_ADDR_REF(ast_entry->mac_addr.raw),
 			  ast_entry->type);
 		return;
@@ -2349,9 +2307,6 @@ static void dp_reo_desc_free(struct dp_soc *soc, void *cb_ctxt,
 		  "%s:%lu hw_qdesc_paddr: %pK, tid:%d", __func__,
 		  curr_ts,
 		  (void *)(rx_tid->hw_qdesc_paddr), rx_tid->tid);
-
-	DP_RX_REO_QDESC_FREE_EVT(freedesc);
-
 	qdf_mem_unmap_nbytes_single(soc->osdev,
 		rx_tid->hw_qdesc_paddr,
 		QDF_DMA_BIDIRECTIONAL,
@@ -2478,7 +2433,6 @@ try_desc_alloc:
 	} else {
 		hw_qdesc_vaddr = rx_tid->hw_qdesc_vaddr_unaligned;
 	}
-	rx_tid->hw_qdesc_vaddr_aligned = hw_qdesc_vaddr;
 
 	/* TODO: Ensure that sec_type is set before ADDBA is received.
 	 * Currently this is set based on htt indication
@@ -2696,8 +2650,6 @@ void dp_rx_tid_delete_cb(struct dp_soc *soc, void *cb_ctxt,
 	struct hal_reo_cmd_params params;
 	bool flush_failure = false;
 
-	DP_RX_REO_QDESC_UPDATE_EVT(freedesc);
-
 	if (reo_status->rx_queue_status.header.status == HAL_REO_CMD_DRAIN) {
 		qdf_mem_zero(reo_status, sizeof(*reo_status));
 		reo_status->fl_cache_status.header.status = HAL_REO_CMD_DRAIN;
@@ -2850,8 +2802,6 @@ static int dp_rx_tid_delete_wifi3(struct dp_peer *peer, int tid)
 	freedesc->resend_update_reo_cmd = false;
 
 	qdf_mem_zero(&params, sizeof(params));
-
-	DP_RX_REO_QDESC_GET_MAC(freedesc, peer);
 
 	params.std.need_status = 1;
 	params.std.addr_lo = rx_tid->hw_qdesc_paddr & 0xffffffff;
@@ -3998,8 +3948,6 @@ QDF_STATUS dp_peer_state_update(struct cdp_soc_t *soc_hdl, uint8_t *peer_mac,
 	}
 	peer->state = state;
 
-	peer->authorize = (state == OL_TXRX_PEER_STATE_AUTH) ? 1 : 0;
-
 	dp_info("peer %pK state %d", peer, peer->state);
 	/* ref_cnt is incremented inside dp_peer_find_hash_find().
 	 * Decrement it here.
@@ -4414,119 +4362,4 @@ struct dp_peer *dp_sta_vdev_self_peer_ref_n_get(struct dp_soc *soc,
 
 	qdf_spin_unlock_bh(&vdev->peer_list_lock);
 	return peer;
-}
-
-#ifdef DUMP_REO_QUEUE_INFO_IN_DDR
-void dp_dump_rx_reo_queue_info(
-	struct dp_soc *soc, void *cb_ctxt, union hal_reo_status *reo_status)
-{
-	struct dp_rx_tid *rx_tid = (struct dp_rx_tid *)cb_ctxt;
-
-	if (!rx_tid)
-		return;
-
-	if (reo_status->fl_cache_status.header.status !=
-		HAL_REO_CMD_SUCCESS) {
-		dp_err_rl("Rx tid REO HW desc flush failed(%d)",
-			  reo_status->rx_queue_status.header.status);
-		return;
-	}
-	qdf_spin_lock_bh(&rx_tid->tid_lock);
-	hal_dump_rx_reo_queue_desc(rx_tid->hw_qdesc_vaddr_aligned);
-	qdf_spin_unlock_bh(&rx_tid->tid_lock);
-}
-
-void dp_send_cache_flush_for_rx_tid(
-	struct dp_soc *soc, struct dp_peer *peer)
-{
-	int i;
-	struct dp_rx_tid *rx_tid;
-	struct hal_reo_cmd_params params;
-
-	if (!peer) {
-		dp_err_rl("Peer is NULL");
-		return;
-	}
-
-	for (i = 0; i < DP_MAX_TIDS; i++) {
-		rx_tid = &peer->rx_tid[i];
-		if (!rx_tid)
-			continue;
-		qdf_spin_lock_bh(&rx_tid->tid_lock);
-		if (rx_tid->hw_qdesc_vaddr_aligned) {
-			qdf_mem_zero(&params, sizeof(params));
-			params.std.need_status = 1;
-			params.std.addr_lo =
-				rx_tid->hw_qdesc_paddr & 0xffffffff;
-			params.std.addr_hi =
-				(uint64_t)(rx_tid->hw_qdesc_paddr) >> 32;
-			params.u.fl_cache_params.flush_no_inval = 0;
-			if (QDF_STATUS_SUCCESS !=
-				dp_reo_send_cmd(
-					soc, CMD_FLUSH_CACHE,
-					&params, dp_dump_rx_reo_queue_info,
-					(void *)rx_tid)) {
-				dp_err_rl("cache flush send failed tid %d",
-					  rx_tid->tid);
-				qdf_spin_unlock_bh(&rx_tid->tid_lock);
-				break;
-			}
-		}
-		qdf_spin_unlock_bh(&rx_tid->tid_lock);
-	}
-}
-
-void dp_get_rx_reo_queue_info(
-	struct cdp_soc_t *soc_hdl, uint8_t vdev_id)
-{
-	struct dp_soc *soc = (struct dp_soc *)soc_hdl;
-	struct dp_vdev *vdev = dp_vdev_get_ref_by_id(soc, vdev_id,
-						     DP_MOD_ID_GENERIC_STATS);
-	struct dp_peer *peer = NULL;
-
-	if (!vdev) {
-		dp_err_rl("vdev is null for vdev_id: %u", vdev_id);
-		goto failed;
-	}
-
-	peer = dp_vdev_bss_peer_ref_n_get(soc, vdev, DP_MOD_ID_GENERIC_STATS);
-
-	if (!peer) {
-		dp_err_rl("Peer is NULL");
-		goto failed;
-	}
-	dp_send_cache_flush_for_rx_tid(soc, peer);
-failed:
-	if (peer)
-		dp_peer_unref_delete(peer, DP_MOD_ID_GENERIC_STATS);
-	if (vdev)
-		dp_vdev_unref_delete(soc, vdev, DP_MOD_ID_GENERIC_STATS);
-}
-#endif /* DUMP_REO_QUEUE_INFO_IN_DDR */
-
-void dp_peer_flush_frags(struct cdp_soc_t *soc_hdl, uint8_t vdev_id,
-			 uint8_t *peer_mac)
-{
-	struct dp_soc *soc = cdp_soc_t_to_dp_soc(soc_hdl);
-	struct dp_peer *peer = dp_peer_find_hash_find(soc, peer_mac, 0,
-						      vdev_id, DP_MOD_ID_CDP);
-	struct dp_rx_tid *rx_tid;
-	uint8_t tid;
-
-	if (!peer)
-		return;
-
-	dp_info("Flushing fragments for peer " QDF_MAC_ADDR_FMT,
-		QDF_MAC_ADDR_REF(peer->mac_addr.raw));
-
-	for (tid = 0; tid < DP_MAX_TIDS; tid++) {
-		rx_tid = &peer->rx_tid[tid];
-
-		qdf_spin_lock_bh(&rx_tid->tid_lock);
-		dp_rx_defrag_waitlist_remove(peer, tid);
-		dp_rx_reorder_flush_frag(peer, tid);
-		qdf_spin_unlock_bh(&rx_tid->tid_lock);
-	}
-
-	dp_peer_unref_delete(peer, DP_MOD_ID_CDP);
 }

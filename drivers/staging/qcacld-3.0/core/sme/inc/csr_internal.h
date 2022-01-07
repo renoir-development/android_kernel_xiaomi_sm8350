@@ -587,6 +587,10 @@ struct csr_roam_session {
 	uint8_t bRefAssocStartCnt;      /* Tracking assoc start indication */
 	struct ht_config ht_config;
 	struct sir_vht_config vht_config;
+#ifdef WLAN_FEATURE_11AX
+	tDot11fIEhe_cap he_config;
+	uint32_t he_sta_obsspd;
+#endif
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 	uint8_t psk_pmk[SIR_ROAM_SCAN_PSK_SIZE];
 	size_t pmk_len;
@@ -876,6 +880,9 @@ bool csr_is_all_session_disconnected(struct mac_context *mac);
 uint8_t csr_get_connected_infra(struct mac_context *mac_ctx);
 bool csr_is_concurrent_session_running(struct mac_context *mac);
 bool csr_is_infra_ap_started(struct mac_context *mac);
+bool csr_is_valid_mc_concurrent_session(struct mac_context *mac,
+					uint32_t sessionId,
+					struct bss_description *bss_desc);
 bool csr_is_conn_state_connected_infra_ap(struct mac_context *mac,
 		uint32_t sessionId);
 QDF_STATUS csr_get_snr(struct mac_context *mac, tCsrSnrCallback callback,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -146,52 +146,6 @@
 		CFG_VALUE_OR_DEFAULT, \
 		"local power constraint")
 
-/*
- * <ini>
- * use_local_tpe - use local or regulatory TPE
- * @Min: 0
- * @Max: 1
- * @Default: 0
- *
- * This ini is used to set the preference of local or regulatory TPE. If the
- * preferred choice is not available, it will fall back on the other choice.
- *
- * Related: None
- *
- * Supported Feature: 6GHz channel transmit power
- *
- * Usage: External
- *
- * </ini>
- */
-#define CFG_USE_LOCAL_TPE CFG_INI_BOOL("use_local_tpe", false, \
-					"use local or regulatory TPE")
-
-/*
- * <ini>
- * skip_tpe_consideration - Skip TPE IE value in tx power calculation for
- * 2G/5G bands
- * @Min: 0
- * @Max: 1
- * @Default: 1
- *
- * This ini is to determine if the TPE IE should be considered in the Tx power
- * calculation. If the ini is set, host will consider TPE IE in case of 6GHz
- * only (skip over in 2GHz or 5GHz case). If the ini is not set, honor the TPE
- * IE values in all bands.
- *
- * Related: None
- *
- * Supported Feature: Transmit power calculation (TPC)
- *
- * Usage: External
- *
- * </ini>
- */
-#define CFG_SKIP_TPE_CONSIDERATION CFG_INI_BOOL("skip_tpe_consideration", \
-						true, \
-						"consider TPE IE in tx power")
-
 #define CFG_MLME_POWER_ALL \
 	CFG(CFG_MAX_TX_POWER_2_4) \
 	CFG(CFG_MAX_TX_POWER_5) \
@@ -199,8 +153,6 @@
 	CFG(CFG_SET_TXPOWER_LIMIT2G) \
 	CFG(CFG_SET_TXPOWER_LIMIT5G) \
 	CFG(CFG_CURRENT_TX_POWER_LEVEL) \
-	CFG(CFG_LOCAL_POWER_CONSTRAINT) \
-	CFG(CFG_USE_LOCAL_TPE) \
-	CFG(CFG_SKIP_TPE_CONSIDERATION)
+	CFG(CFG_LOCAL_POWER_CONSTRAINT)
 
 #endif /* __CFG_MLME_POWER_H */

@@ -388,8 +388,7 @@ struct set_custom_aggr_size_params {
 		 tx_aggr_size_disable:1,
 		 rx_aggr_size_disable:1,
 		 tx_ac_enable:1,
-		 aggr_ba_enable:1,
-		 reserved:25;
+		 reserved:26;
 };
 
 /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -106,12 +106,12 @@ QDF_STATUS target_if_wake_lock_timeout_release(struct wlan_objmgr_psoc *psoc,
  * target_if_vdev_start_link_handler() - check for SAP mode and DFS freq
 						to handle link up/down
  * @vdev: pointer to vdev
- * @is_restart: flag to check if it is vdev restart
+ * @is_dfs : is dfs freq
  *
  * Return: None
  */
 void target_if_vdev_start_link_handler(struct wlan_objmgr_vdev *vdev,
-				       bool is_restart);
+				       uint32_t is_dfs);
 
 /**
  * target_if_vdev_stop_link_handler() - check for SAP mode to handle link
@@ -146,7 +146,7 @@ static inline QDF_STATUS target_if_wake_lock_timeout_release(
 
 static inline void
 target_if_vdev_start_link_handler(struct wlan_objmgr_vdev *vdev,
-				  bool is_restart)
+				  uint32_t is_dfs)
 {
 }
 

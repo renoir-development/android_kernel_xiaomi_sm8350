@@ -38,8 +38,6 @@
 #define DP_TX_DESC_FLAG_TDLS_FRAME	0x100
 #define DP_TX_DESC_FLAG_ALLOCATED	0x200
 #define DP_TX_DESC_FLAG_MESH_MODE	0x400
-#define DP_TX_DESC_FLAG_TX_COMP_ERR	0x1000
-#define DP_TX_DESC_FLAG_FLUSH		0x2000
 
 #define DP_TX_EXT_DESC_FLAG_METADATA_VALID 0x1
 
@@ -529,17 +527,4 @@ QDF_STATUS dp_peer_set_tx_capture_enabled(struct dp_pdev *pdev,
 #endif
 void dp_tx_desc_flush(struct dp_pdev *pdev, struct dp_vdev *vdev,
 		      bool force_free);
-
-#ifdef WLAN_FEATURE_PKT_CAPTURE_V2
-void dp_send_completion_to_pkt_capture(struct dp_soc *soc,
-				       struct dp_tx_desc_s *desc,
-				       struct hal_tx_completion_status *ts);
-#else
-static inline void
-dp_send_completion_to_pkt_capture(struct dp_soc *soc,
-				  struct dp_tx_desc_s *desc,
-				  struct hal_tx_completion_status *ts)
-{
-}
-#endif
 #endif

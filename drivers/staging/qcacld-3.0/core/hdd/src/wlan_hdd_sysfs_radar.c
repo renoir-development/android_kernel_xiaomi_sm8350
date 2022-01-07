@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -79,8 +79,7 @@ __hdd_sysfs_radar_store(struct net_device *net_dev,
 	}
 
 	qdf_mem_zero(&radar, sizeof(radar));
-	if (policy_mgr_get_dfs_beaconing_session_id(hdd_ctx->psoc) !=
-	    WLAN_UMAC_VDEV_ID_MAX)
+	if (wlan_reg_is_dfs_for_freq(pdev, ap_ctx->operating_chan_freq))
 		tgt_dfs_process_radar_ind(pdev, &radar);
 	else
 		hdd_debug("Ignore set radar, op ch_freq(%d) is not dfs",

@@ -142,17 +142,6 @@
 #define WLAN_RM_CAPABILITY_IE_MAX_LEN            5
 #define WLAN_RNR_IE_MIN_LEN                      5
 
-/* Wide band channel switch IE length */
-#define WLAN_WIDE_BW_CHAN_SWITCH_IE_LEN          3
-
-/* Number of max TX power elements supported plus size of Transmit Power
- * Information element.
- */
-#define WLAN_TPE_IE_MAX_LEN                      9
-
-/* Max channel switch time IE length */
-#define WLAN_MAX_CHAN_SWITCH_TIME_IE_LEN         4
-
 /* HT capability flags */
 #define WLAN_HTCAP_C_ADVCODING             0x0001
 #define WLAN_HTCAP_C_CHWIDTH40             0x0002
@@ -1838,8 +1827,6 @@ is_bwnss_oui(uint8_t *frm)
 	return (frm[1] > 3) && (LE_READ_4(frm + 2) ==
 		((ATH_OUI_BW_NSS_MAP_TYPE << 24) | ATH_OUI));
 }
-
-#define WLAN_BWNSS_MAP_OFFSET 6
 
 /**
  * is_he_cap_oui() - If vendor IE is HE CAP OUI

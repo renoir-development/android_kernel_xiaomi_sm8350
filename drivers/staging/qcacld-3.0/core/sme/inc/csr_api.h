@@ -593,9 +593,6 @@ typedef struct tagPmkidCacheInfo {
 	uint8_t ssid_len;
 	uint8_t ssid[WLAN_SSID_MAX_LEN];
 	uint8_t cache_id[CACHE_ID_LEN];
-	uint32_t   pmk_lifetime;
-	uint8_t    pmk_lifetime_threshold;
-	qdf_time_t pmk_ts;
 } tPmkidCacheInfo;
 
 #ifdef FEATURE_WLAN_WAPI
@@ -1410,6 +1407,31 @@ void csr_clear_channel_status(struct mac_context *mac);
 QDF_STATUS csr_update_owe_info(struct mac_context *mac,
 			       struct assoc_ind *assoc_ind);
 
+/**
+ * csr_send_roam_offload_init_msg() - Send roam enable/disable flag to fw
+ * @mac: mac context
+ * @vdev_id: vdev id
+ * @enable: enable/disable roam flag
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS
+csr_send_roam_offload_init_msg(struct mac_context *mac, uint32_t vdev_id,
+			       bool enable);
+
+#ifndef ROAM_OFFLOAD_V1
+/**
+ * csr_send_roam_disable_cfg_msg() - Send roam module enable/disable cfg to fw
+ * @mac: mac context
+ * @vdev_id: vdev id
+ * @cfg: roaming enable/disable cfg
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS csr_send_roam_disable_cfg_msg(struct mac_context *mac,
+					 uint32_t vdev_id, uint8_t cfg);
+#endif
+
 typedef void (*csr_ani_callback)(int8_t *ani, void *context);
 
 #ifdef WLAN_FEATURE_11W
@@ -1452,41 +1474,5 @@ enum reg_phymode csr_convert_to_reg_phy_mode(eCsrPhyMode csr_phy_mode,
  * Return: eCSR phymode that is comparable to input
  */
 eCsrPhyMode csr_convert_from_reg_phy_mode(enum reg_phymode phymode);
-
-/*
- * csr_update_beacon() - CSR API to update beacon template
- * @mac: mac context
- *
- * This API is used to update beacon template to FW
- *
- * Return: None
- */
-void csr_update_beacon(struct mac_context *mac);
-
-/*
- * csr_mlme_vdev_disconnect_all_p2p_client_event() - Callback for MLME module
- *	to send a disconnect all P2P event to the SAP event handler
- * @vdev_id: vdev id of SAP
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS csr_mlme_vdev_disconnect_all_p2p_client_event(uint8_t vdev_id);
-
-/*
- * csr_mlme_vdev_stop_bss() - Callback for MLME module to send a stop BSS event
- *	to the SAP event handler
- * @vdev_id: vdev id of SAP
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS csr_mlme_vdev_stop_bss(uint8_t vdev_id);
-
-/*
- * csr_mlme_get_concurrent_operation_freq() - Callback for MLME module to
- *	get the concurrent operation frequency
- *
- * Return: concurrent frequency
- */
-qdf_freq_t csr_mlme_get_concurrent_operation_freq(void);
 
 #endif

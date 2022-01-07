@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -26,10 +26,6 @@
 #include "hif.h"
 #include "hif_io32.h"
 #include "qdf_platform.h"
-
-#ifdef DUMP_REO_QUEUE_INFO_IN_DDR
-#include "hal_hw_headers.h"
-#endif
 
 /* Ring index for WBM2SW2 release ring */
 #define HAL_IPA_TX_COMP_RING_IDX 2
@@ -294,7 +290,7 @@ static inline void hal_write32_mb(struct hal_soc *hal_soc, uint32_t offset,
 		ret = hif_force_wake_request(hal_soc->hif_handle);
 		if (ret) {
 			hal_err_rl("Wake up request failed");
-			qdf_check_state_before_panic(__func__, __LINE__);
+			qdf_check_state_before_panic();
 			return;
 		}
 	}
@@ -319,7 +315,7 @@ static inline void hal_write32_mb(struct hal_soc *hal_soc, uint32_t offset,
 		ret = hif_force_wake_release(hal_soc->hif_handle);
 		if (ret) {
 			hal_err("Wake up release failed");
-			qdf_check_state_before_panic(__func__, __LINE__);
+			qdf_check_state_before_panic();
 			return;
 		}
 	}
@@ -354,7 +350,7 @@ static inline void hal_write32_mb_confirm(struct hal_soc *hal_soc,
 		ret = hif_force_wake_request(hal_soc->hif_handle);
 		if (ret) {
 			hal_err("Wake up request failed");
-			qdf_check_state_before_panic(__func__, __LINE__);
+			qdf_check_state_before_panic();
 			return;
 		}
 	}
@@ -389,7 +385,7 @@ static inline void hal_write32_mb_confirm(struct hal_soc *hal_soc,
 		ret = hif_force_wake_release(hal_soc->hif_handle);
 		if (ret) {
 			hal_err("Wake up release failed");
-			qdf_check_state_before_panic(__func__, __LINE__);
+			qdf_check_state_before_panic();
 			return;
 		}
 	}
@@ -455,8 +451,7 @@ static inline void hal_srng_write_address_32_mb(struct hal_soc *hal_soc,
 {
 	qdf_iowrite32(addr, value);
 }
-#elif defined(FEATURE_HAL_DELAYED_REG_WRITE) || \
-	defined(FEATURE_HAL_DELAYED_REG_WRITE_V2)
+#elif defined(FEATURE_HAL_DELAYED_REG_WRITE)
 static inline void hal_srng_write_address_32_mb(struct hal_soc *hal_soc,
 						struct hal_srng *srng,
 						void __iomem *addr,
@@ -542,7 +537,7 @@ uint32_t hal_read32_mb(struct hal_soc *hal_soc, uint32_t offset)
 	if ((!hal_soc->init_phase) &&
 	    hif_force_wake_request(hal_soc->hif_handle)) {
 		hal_err("Wake up request failed");
-		qdf_check_state_before_panic(__func__, __LINE__);
+		qdf_check_state_before_panic();
 		return 0;
 	}
 
@@ -565,7 +560,7 @@ uint32_t hal_read32_mb(struct hal_soc *hal_soc, uint32_t offset)
 	if ((!hal_soc->init_phase) &&
 	    hif_force_wake_release(hal_soc->hif_handle)) {
 		hal_err("Wake up release failed");
-		qdf_check_state_before_panic(__func__, __LINE__);
+		qdf_check_state_before_panic();
 		return 0;
 	}
 
@@ -778,8 +773,7 @@ static inline void hal_write32_mb_confirm_retry(struct hal_soc *hal_soc,
 }
 #endif /* GENERIC_SHADOW_REGISTER_ACCESS_ENABLE */
 
-#if defined(FEATURE_HAL_DELAYED_REG_WRITE) || \
-	defined(FEATURE_HAL_DELAYED_REG_WRITE_V2)
+#ifdef FEATURE_HAL_DELAYED_REG_WRITE
 /**
  * hal_dump_reg_write_srng_stats() - dump SRNG reg write stats
  * @hal_soc: HAL soc handle
@@ -863,6 +857,35 @@ void *hal_attach(struct hif_opaque_softc *hif_handle, qdf_device_t qdf_dev);
  *
  */
 extern void hal_detach(void *hal_soc);
+
+/* SRNG type to be passed in APIs hal_srng_get_entrysize and hal_srng_setup */
+enum hal_ring_type {
+	REO_DST = 0,
+	REO_EXCEPTION = 1,
+	REO_REINJECT = 2,
+	REO_CMD = 3,
+	REO_STATUS = 4,
+	TCL_DATA = 5,
+	TCL_CMD_CREDIT = 6,
+	TCL_STATUS = 7,
+	CE_SRC = 8,
+	CE_DST = 9,
+	CE_DST_STATUS = 10,
+	WBM_IDLE_LINK = 11,
+	SW2WBM_RELEASE = 12,
+	WBM2SW_RELEASE = 13,
+	RXDMA_BUF = 14,
+	RXDMA_DST = 15,
+	RXDMA_MONITOR_BUF = 16,
+	RXDMA_MONITOR_STATUS = 17,
+	RXDMA_MONITOR_DST = 18,
+	RXDMA_MONITOR_DESC = 19,
+	DIR_BUF_RX_DMA_SRC = 20,
+#ifdef WLAN_FEATURE_CIF_CFR
+	WIFI_POS_SRC,
+#endif
+	MAX_RING_TYPES
+};
 
 #define HAL_SRNG_LMAC_RING 0x80000000
 /* SRNG flags passed in hal_srng_params.flags */
@@ -1122,15 +1145,11 @@ void hal_reo_read_write_ctrl_ix(hal_soc_handle_t hal_soc_hdl, bool read,
 				uint32_t *ix2, uint32_t *ix3);
 
 /**
- * hal_srng_set_hp_paddr_confirm() - Set physical address to dest SRNG head
- *  pointer and confirm that write went through by reading back the value
+ * hal_srng_set_hp_paddr() - Set physical address to dest SRNG head pointer
  * @sring: sring pointer
  * @paddr: physical address
- *
- * Return: None
  */
-extern void hal_srng_dst_set_hp_paddr_confirm(struct hal_srng *sring,
-					      uint64_t paddr);
+extern void hal_srng_dst_set_hp_paddr(struct hal_srng *sring, uint64_t paddr);
 
 /**
  * hal_srng_dst_init_hp() - Initilaize head pointer with cached head pointer
@@ -2380,78 +2399,6 @@ void hal_setup_link_idle_list(hal_soc_handle_t hal_soc_hdl,
 
 }
 
-#ifdef DUMP_REO_QUEUE_INFO_IN_DDR
-/**
- * hal_dump_rx_reo_queue_desc() - Dump reo queue descriptor fields
- * @hw_qdesc_vaddr_aligned: Pointer to hw reo queue desc virtual addr
- *
- * Use the virtual addr pointer to reo h/w queue desc to read
- * the values from ddr and log them.
- *
- * Return: none
- */
-static inline void hal_dump_rx_reo_queue_desc(
-	void *hw_qdesc_vaddr_aligned)
-{
-	struct rx_reo_queue *hw_qdesc =
-		(struct rx_reo_queue *)hw_qdesc_vaddr_aligned;
-
-	if (!hw_qdesc)
-		return;
-
-	hal_info("receive_queue_number %u vld %u window_jump_2k %u"
-		 " hole_count %u ba_window_size %u ignore_ampdu_flag %u"
-		 " svld %u ssn %u current_index %u"
-		 " disable_duplicate_detection %u soft_reorder_enable %u"
-		 " chk_2k_mode %u oor_mode %u mpdu_frames_processed_count %u"
-		 " msdu_frames_processed_count %u total_processed_byte_count %u"
-		 " late_receive_mpdu_count %u seq_2k_error_detected_flag %u"
-		 " pn_error_detected_flag %u current_mpdu_count %u"
-		 " current_msdu_count %u timeout_count %u"
-		 " forward_due_to_bar_count %u duplicate_count %u"
-		 " frames_in_order_count %u bar_received_count %u"
-		 " pn_check_needed %u pn_shall_be_even %u"
-		 " pn_shall_be_uneven %u pn_size %u",
-		 hw_qdesc->receive_queue_number,
-		 hw_qdesc->vld,
-		 hw_qdesc->window_jump_2k,
-		 hw_qdesc->hole_count,
-		 hw_qdesc->ba_window_size,
-		 hw_qdesc->ignore_ampdu_flag,
-		 hw_qdesc->svld,
-		 hw_qdesc->ssn,
-		 hw_qdesc->current_index,
-		 hw_qdesc->disable_duplicate_detection,
-		 hw_qdesc->soft_reorder_enable,
-		 hw_qdesc->chk_2k_mode,
-		 hw_qdesc->oor_mode,
-		 hw_qdesc->mpdu_frames_processed_count,
-		 hw_qdesc->msdu_frames_processed_count,
-		 hw_qdesc->total_processed_byte_count,
-		 hw_qdesc->late_receive_mpdu_count,
-		 hw_qdesc->seq_2k_error_detected_flag,
-		 hw_qdesc->pn_error_detected_flag,
-		 hw_qdesc->current_mpdu_count,
-		 hw_qdesc->current_msdu_count,
-		 hw_qdesc->timeout_count,
-		 hw_qdesc->forward_due_to_bar_count,
-		 hw_qdesc->duplicate_count,
-		 hw_qdesc->frames_in_order_count,
-		 hw_qdesc->bar_received_count,
-		 hw_qdesc->pn_check_needed,
-		 hw_qdesc->pn_shall_be_even,
-		 hw_qdesc->pn_shall_be_uneven,
-		 hw_qdesc->pn_size);
-}
-
-#else /* DUMP_REO_QUEUE_INFO_IN_DDR */
-
-static inline void hal_dump_rx_reo_queue_desc(
-	void *hw_qdesc_vaddr_aligned)
-{
-}
-#endif /* DUMP_REO_QUEUE_INFO_IN_DDR */
-
 /**
  * hal_srng_dump_ring_desc() - Dump ring descriptor info
  *
@@ -2676,9 +2623,7 @@ static inline QDF_STATUS hal_construct_shadow_regs(void *hal_soc)
  * Return: None
  */
 void hal_flush_reg_write_work(hal_soc_handle_t hal_handle);
-
 #else
 static inline void hal_flush_reg_write_work(hal_soc_handle_t hal_handle) { }
 #endif
-
 #endif /* _HAL_APIH_ */

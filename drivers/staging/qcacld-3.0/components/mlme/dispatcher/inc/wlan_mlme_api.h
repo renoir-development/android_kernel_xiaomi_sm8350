@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -545,16 +545,6 @@ QDF_STATUS wlan_mlme_set_assoc_sta_limit(struct wlan_objmgr_psoc *psoc,
 					 int value);
 
 /**
- * wlan_mlme_get_assoc_sta_limit() - Get the assoc sta limit
- * @psoc: pointer to psoc object
- * @value: Pointer to value that needs to be filled by MLME
- *
- * Return: QDF Status
- */
-QDF_STATUS wlan_mlme_get_assoc_sta_limit(struct wlan_objmgr_psoc *psoc,
-					 int *value);
-
-/**
  * wlan_mlme_set_sap_get_peer_info() - get the sap get peer info
  * @psoc: pointer to psoc object
  * @value: Value that needs to be set from the caller
@@ -823,16 +813,6 @@ QDF_STATUS wlan_mlme_get_oce_sta_enabled_info(struct wlan_objmgr_psoc *psoc,
  */
 QDF_STATUS wlan_mlme_get_bigtk_support(struct wlan_objmgr_psoc *psoc,
 				       bool *value);
-
-/**
- * wlan_mlme_get_ocv_support() - Get the OCV support
- * @psoc: pointer to psoc object
- * @value: pointer to the value which will be filled for the caller
- *
- * Return: QDF Status
- */
-QDF_STATUS wlan_mlme_get_ocv_support(struct wlan_objmgr_psoc *psoc,
-				     bool *value);
 
 /**
  * wlan_mlme_get_host_scan_abort_support() - Get support for stop all host
@@ -2136,26 +2116,6 @@ QDF_STATUS
 wlan_mlme_set_11d_enabled(struct wlan_objmgr_psoc *psoc, bool value);
 
 /**
- * wlan_mlme_is_rf_test_mode_enabled() - Get the rf test mode flag
- * @psoc: psoc context
- * @value: Enable/Disable value ptr.
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS
-wlan_mlme_is_rf_test_mode_enabled(struct wlan_objmgr_psoc *psoc, bool *value);
-
-/**
- * wlan_mlme_set_rf_test_mode_enabled() - Set the rf test mode flag
- * @psoc: psoc context
- * @value: Enable/Disable value.
- *
- * Return: QDF_STATUS
- */
-QDF_STATUS
-wlan_mlme_set_rf_test_mode_enabled(struct wlan_objmgr_psoc *psoc, bool value);
-
-/**
  * wlan_mlme_get_sta_miracast_mcc_rest_time() - Get STA/MIRACAST MCC rest time
  *
  * @psoc: pointer to psoc object
@@ -3068,42 +3028,4 @@ QDF_STATUS mlme_set_ext_opr_rate(struct wlan_objmgr_vdev *vdev, uint8_t *src,
  * Return: True if supported
  */
 bool wlan_mlme_is_sta_mon_conc_supported(struct wlan_objmgr_psoc *psoc);
-
-#ifdef WLAN_SUPPORT_TWT
-/**
- * mlme_is_twt_enabled() - Get if TWT is enabled via ini.
- * @psoc: pointer to psoc object
- * @val: pointer to the value to be filled
- *
- * Return: True if TWT is enabled else false.
- */
-bool
-mlme_is_twt_enabled(struct wlan_objmgr_psoc *psoc);
-#else
-static inline bool
-mlme_is_twt_enabled(struct wlan_objmgr_psoc *psoc)
-{
-	return false;
-}
-#endif /* WLAN_SUPPORT_TWT */
-
-/**
- * wlan_mlme_is_local_tpe_pref() - Get preference to use local TPE or
- * regulatory TPE values
- * @psoc: pointer to psoc object
- *
- * Return: True if there is local preference, false if there is regulatory
- * preference
- */
-bool wlan_mlme_is_local_tpe_pref(struct wlan_objmgr_psoc *psoc);
-
-/**
- * wlan_mlme_skip_tpe() - Get preference to not consider TPE in 2G/5G case
- *
- * @psoc: pointer to psoc object
- *
- * Return: True if host should not consider TPE IE in TX power calculation when
- * operating in 2G/5G bands, false if host should always consider TPE IE values
- */
-bool wlan_mlme_skip_tpe(struct wlan_objmgr_psoc *psoc);
 #endif /* _WLAN_MLME_API_H_ */

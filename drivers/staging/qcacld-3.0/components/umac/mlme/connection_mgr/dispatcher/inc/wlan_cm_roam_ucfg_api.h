@@ -25,6 +25,8 @@
 
 #include "wlan_cm_roam_api.h"
 
+#ifdef ROAM_OFFLOAD_V1
+
 /**
  * ucfg_user_space_enable_disable_rso() - Enable/Disable Roam Scan offload
  * to firmware.
@@ -40,17 +42,6 @@ QDF_STATUS
 ucfg_user_space_enable_disable_rso(struct wlan_objmgr_pdev *pdev,
 				   uint8_t vdev_id,
 				   const bool is_fast_roam_enabled);
-
-/**
- * ucfg_is_roaming_enabled() - Check if roaming enabled
- * to firmware.
- * @psoc: psoc context
- * @vdev_id: vdev id
- *
- * Return: True if Roam state machine is in
- *	   WLAN_ROAM_RSO_ENABLED/WLAN_ROAMING_IN_PROG/WLAN_ROAM_SYNCH_IN_PROG
- */
-bool ucfg_is_roaming_enabled(struct wlan_objmgr_pdev *pdev, uint8_t vdev_id);
 
 /*
  * ucfg_cm_abort_roam_scan() -abort current roam scan cycle by roam scan
@@ -163,4 +154,5 @@ ucfg_cm_update_roam_scan_scheme_bitmap(struct wlan_objmgr_psoc *psoc,
 {
 	return QDF_STATUS_SUCCESS;
 }
+#endif
 #endif

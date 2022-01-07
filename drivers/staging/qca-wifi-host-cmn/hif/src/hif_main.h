@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -143,22 +143,6 @@ struct hif_ce_stats {
 	int ce_ring_delta_fail_count;
 };
 
-#ifdef HIF_DETECTION_LATENCY_ENABLE
-struct hif_latency_detect {
-	qdf_timer_t detect_latency_timer;
-	uint32_t detect_latency_timer_timeout;
-	bool is_timer_started;
-	bool enable_detection;
-	/* threshold when stall happens */
-	uint32_t detect_latency_threshold;
-	int ce2_tasklet_sched_cpuid;
-	qdf_time_t ce2_tasklet_sched_time;
-	qdf_time_t ce2_tasklet_exec_time;
-	qdf_time_t credit_request_time;
-	qdf_time_t credit_report_time;
-};
-#endif
-
 /*
  * Note: For MCL, #if defined (HIF_CONFIG_SLUB_DEBUG_ON) needs to be checked
  * for defined here
@@ -202,7 +186,7 @@ struct hif_softc {
 	/* Packet statistics */
 	struct hif_ce_stats pkt_stats;
 	enum hif_target_status target_status;
-	uint64_t event_enable_mask;
+	uint64_t event_disable_mask;
 
 	struct targetdef_s *targetdef;
 	struct ce_reg_def *target_ce_def;
@@ -246,7 +230,6 @@ struct hif_softc {
 	uint32_t hif_attribute;
 	int wake_irq;
 	int disable_wake_irq;
-	hif_pm_wake_irq_type wake_irq_type;
 	void (*initial_wakeup_cb)(void *);
 	void *initial_wakeup_priv;
 #ifdef REMOVE_PKT_LOG
@@ -280,20 +263,6 @@ struct hif_softc {
 	/* Should the unlzay support for interrupt delivery be disabled */
 	/* Flag to indicate whether bus is suspended */
 	bool bus_suspended;
-#ifdef FEATURE_RUNTIME_PM
-	/* Variable to track the link state change in RTPM */
-	qdf_atomic_t pm_link_state;
-#endif
-#ifdef HIF_DETECTION_LATENCY_ENABLE
-	struct hif_latency_detect latency_detect;
-#endif
-#ifdef SYSTEM_PM_CHECK
-	qdf_atomic_t sys_pm_state;
-#endif
-#if defined(HIF_IPCI) && defined(FEATURE_HAL_DELAYED_REG_WRITE)
-	qdf_atomic_t dp_ep_vote_access;
-	qdf_atomic_t ep_vote_access;
-#endif
 };
 
 static inline
@@ -349,7 +318,7 @@ static inline void hif_set_event_hist_mask(struct hif_opaque_softc *hif_handle)
 {
 	struct hif_softc *scn = (struct hif_softc *)hif_handle;
 
-	scn->event_enable_mask = HIF_EVENT_HIST_ENABLE_MASK;
+	scn->event_disable_mask = HIF_EVENT_HIST_DISABLE_MASK;
 }
 #else
 static inline void hif_set_event_hist_mask(struct hif_opaque_softc *hif_handle)

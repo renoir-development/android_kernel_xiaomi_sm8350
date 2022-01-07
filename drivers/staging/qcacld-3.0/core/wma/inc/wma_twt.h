@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2019-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2019-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -118,18 +118,6 @@ wma_twt_process_pause_dialog(t_wma_handle *wma_handle,
 			     struct wmi_twt_pause_dialog_cmd_param *params);
 
 /**
- * wma_twt_process_nudge_dialog() - Process nudge dialog command
- * @wma_handle: wma handle
- * @params: nudge dialog configuration parameters
- *
- * Return: QDF_STATUS_SUCCESS on success, other QDF_STATUS error code
- * on failure
- */
-QDF_STATUS
-wma_twt_process_nudge_dialog(t_wma_handle *wma_handle,
-			     struct wmi_twt_nudge_dialog_cmd_param *params);
-
-/**
  * wma_twt_process_resume_dialog() - Process resume dialog command
  * @wma_handle: wma handle
  * @params: resume dialog configuration parameters
@@ -152,18 +140,6 @@ wma_twt_process_resume_dialog(t_wma_handle *wma_handle,
  */
 void wma_update_bcast_twt_support(tp_wma_handle wh,
 				  struct wma_tgt_cfg *tgt_cfg);
-
-/**
- * wma_update_twt_tgt_cap()- update the supported twt capabilities
- * @wh: wma handle
- * @tgt_cfg: target configuration to be updated
- *
- * Update support for twt capabilities based on service bit.
- *
- * Return: None
- */
-void wma_update_twt_tgt_cap(tp_wma_handle wh, struct wma_tgt_cfg *tgt_cfg);
-
 /**
  * wma_register_twt_events() - register for TWT wmi events
  * @wma_handle : wma handle
@@ -220,15 +196,6 @@ wma_twt_process_pause_dialog(t_wma_handle *wma_handle,
 }
 
 static inline QDF_STATUS
-wma_twt_process_nudge_dialog(t_wma_handle *wma_handle,
-			     struct wmi_twt_nudge_dialog_cmd_param *params)
-{
-	wma_debug("TWT not supported as WLAN_SUPPORT_TWT is disabled");
-
-	return QDF_STATUS_E_INVAL;
-}
-
-static inline QDF_STATUS
 wma_twt_process_resume_dialog(t_wma_handle *wma_handle,
 			      struct wmi_twt_resume_dialog_cmd_param *params)
 {
@@ -242,10 +209,6 @@ static inline void wma_update_bcast_twt_support(tp_wma_handle wh,
 {
 }
 
-static inline
-void wma_update_twt_tgt_cap(tp_wma_handle wh, struct wma_tgt_cfg *tgt_cfg)
-{
-}
 static inline void wma_register_twt_events(tp_wma_handle wma_handle)
 {
 }

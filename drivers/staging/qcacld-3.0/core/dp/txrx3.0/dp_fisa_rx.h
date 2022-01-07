@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020, The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -22,7 +22,7 @@
 #ifdef FISA_DEBUG_ENABLE
 #define dp_fisa_debug dp_info
 #else
-#define dp_fisa_debug(params...)
+#define dp_fisa_debug dp_debug
 #endif
 
 #if defined(WLAN_SUPPORT_RX_FISA)
@@ -30,6 +30,7 @@
 #define FSE_CACHE_FLUSH_TIME_OUT	5 /* milliSeconds */
 #define FISA_UDP_MAX_DATA_LEN		1470 /* udp max data length */
 #define FISA_UDP_HDR_LEN		8 /* udp header length */
+#define FISA_FLOW_MAX_AGGR_COUNT        16 /* max flow aggregate count */
 /* single packet max cumulative ip length */
 #define FISA_MAX_SINGLE_CUMULATIVE_IP_LEN \
 	(FISA_UDP_MAX_DATA_LEN + FISA_UDP_HDR_LEN)
@@ -39,8 +40,6 @@
 
 #define IPSEC_PORT 500
 #define IPSEC_NAT_PORT 4500
-
-#define DP_FT_LOCK_MAX_RECORDS 32
 
 struct dp_fisa_rx_fst_update_elem {
 	/* Do not add new entries here */
@@ -52,23 +51,6 @@ struct dp_fisa_rx_fst_update_elem {
 	bool is_tcp_flow;
 	bool is_udp_flow;
 	u8 reo_id;
-};
-
-enum dp_ft_lock_event_type {
-	DP_FT_LOCK_EVENT,
-	DP_FT_UNLOCK_EVENT,
-};
-
-struct dp_ft_lock_record {
-	const char *func;
-	int cpu_id;
-	uint64_t timestamp;
-	enum dp_ft_lock_event_type type;
-};
-
-struct dp_ft_lock_history {
-	uint32_t record_idx;
-	struct dp_ft_lock_record ft_lock_rec[DP_FT_LOCK_MAX_RECORDS];
 };
 
 /**

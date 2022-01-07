@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -181,32 +181,22 @@ static int __wlan_hdd_request_pre_cac(struct hdd_context *hdd_ctx,
 	mac_handle_t mac_handle;
 	bool val;
 
-	if (!policy_mgr_is_hw_dbs_capable(hdd_ctx->psoc)) {
-		hdd_debug("Pre CAC is not supported on non-dbs platforms");
-		return -EINVAL;
-	}
-
 	pre_cac_adapter = hdd_get_adapter_by_iface_name(hdd_ctx,
 							SAP_PRE_CAC_IFNAME);
 	if (pre_cac_adapter) {
 		/* Flush existing pre_cac work */
 		if (hdd_ctx->sap_pre_cac_work.fn)
 			cds_flush_work(&hdd_ctx->sap_pre_cac_work);
-	} else {
-		if (policy_mgr_get_connection_count(hdd_ctx->psoc) > 1) {
-			hdd_err("pre cac not allowed in concurrency");
-			return -EINVAL;
-		}
+	}
+
+	if (policy_mgr_get_connection_count(hdd_ctx->psoc) > 1) {
+		hdd_err("pre cac not allowed in concurrency");
+		return -EINVAL;
 	}
 
 	ap_adapter = hdd_get_adapter(hdd_ctx, QDF_SAP_MODE);
 	if (!ap_adapter) {
 		hdd_err("unable to get SAP adapter");
-		return -EINVAL;
-	}
-
-	if (qdf_atomic_read(&ap_adapter->ch_switch_in_progress)) {
-		hdd_err("pre cac not allowed during CSA");
 		return -EINVAL;
 	}
 
@@ -417,49 +407,14 @@ release_intf_addr_and_return_failure:
 	return -EINVAL;
 }
 
-static int
-wlan_hdd_start_pre_cac_trans(struct hdd_context *hdd_ctx,
-			     struct osif_vdev_sync **out_vdev_sync,
-			     bool *is_vdev_sync_created)
-{
-	struct hdd_adapter *adapter, *next_adapter = NULL;
-	wlan_net_dev_ref_dbgid dbgid = NET_DEV_HOLD_START_PRE_CAC_TRANS;
-	int errno;
-
-	hdd_for_each_adapter_dev_held_safe(hdd_ctx, adapter, next_adapter,
-					   dbgid) {
-		if (!qdf_str_cmp(adapter->dev->name, SAP_PRE_CAC_IFNAME)) {
-			errno = osif_vdev_sync_trans_start(adapter->dev,
-							   out_vdev_sync);
-
-			hdd_adapter_dev_put_debug(adapter, dbgid);
-			if (next_adapter)
-				hdd_adapter_dev_put_debug(next_adapter,
-							  dbgid);
-			return errno;
-
-		}
-		hdd_adapter_dev_put_debug(adapter, dbgid);
-	}
-
-	errno = osif_vdev_sync_create_and_trans(hdd_ctx->parent_dev,
-						out_vdev_sync);
-	if (errno)
-		return errno;
-
-	*is_vdev_sync_created = true;
-	return 0;
-}
-
 int wlan_hdd_request_pre_cac(struct hdd_context *hdd_ctx, uint32_t chan_freq)
 {
 	struct hdd_adapter *adapter;
 	struct osif_vdev_sync *vdev_sync;
 	int errno;
-	bool is_vdev_sync_created = false;
 
-	errno = wlan_hdd_start_pre_cac_trans(hdd_ctx, &vdev_sync,
-					     &is_vdev_sync_created);
+	errno = osif_vdev_sync_create_and_trans(hdd_ctx->parent_dev,
+						&vdev_sync);
 	if (errno)
 		return errno;
 
@@ -467,16 +422,14 @@ int wlan_hdd_request_pre_cac(struct hdd_context *hdd_ctx, uint32_t chan_freq)
 	if (errno)
 		goto destroy_sync;
 
-	if (is_vdev_sync_created)
-		osif_vdev_sync_register(adapter->dev, vdev_sync);
+	osif_vdev_sync_register(adapter->dev, vdev_sync);
 	osif_vdev_sync_trans_stop(vdev_sync);
 
 	return 0;
 
 destroy_sync:
 	osif_vdev_sync_trans_stop(vdev_sync);
-	if (is_vdev_sync_created)
-		osif_vdev_sync_destroy(vdev_sync);
+	osif_vdev_sync_destroy(vdev_sync);
 
 	return errno;
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -742,8 +742,6 @@ int hdd_reg_set_country(struct hdd_context *hdd_ctx, char *country_code)
 {
 	QDF_STATUS status;
 	uint8_t cc[REG_ALPHA2_LEN + 1];
-	uint8_t alpha2[REG_ALPHA2_LEN + 1];
-	enum country_src cc_src;
 
 	if (!country_code) {
 		hdd_err("country_code is null");
@@ -753,26 +751,9 @@ int hdd_reg_set_country(struct hdd_context *hdd_ctx, char *country_code)
 	qdf_mem_copy(cc, country_code, REG_ALPHA2_LEN);
 	cc[REG_ALPHA2_LEN] = '\0';
 
-	if (!qdf_mem_cmp(country_code, hdd_ctx->reg.alpha2, REG_ALPHA2_LEN)) {
-		cc_src = ucfg_reg_get_cc_and_src(hdd_ctx->psoc, alpha2);
-		if (cc_src == SOURCE_USERSPACE || cc_src == SOURCE_CORE) {
-			hdd_debug("country code is the same");
-			return 0;
-		}
-	}
-
-	qdf_event_reset(&hdd_ctx->regulatory_update_event);
-	qdf_mutex_acquire(&hdd_ctx->regulatory_status_lock);
-	hdd_ctx->is_regulatory_update_in_progress = true;
-	qdf_mutex_release(&hdd_ctx->regulatory_status_lock);
-
 	status = ucfg_reg_set_country(hdd_ctx->pdev, cc);
-	if (QDF_IS_STATUS_ERROR(status)) {
+	if (QDF_IS_STATUS_ERROR(status))
 		hdd_err("Failed to set country");
-		qdf_mutex_acquire(&hdd_ctx->regulatory_status_lock);
-		hdd_ctx->is_regulatory_update_in_progress = false;
-		qdf_mutex_release(&hdd_ctx->regulatory_status_lock);
-	}
 
 	return qdf_status_to_os_return(status);
 }
@@ -929,11 +910,6 @@ void hdd_reg_notifier(struct wiphy *wiphy,
 		    NL80211_USER_REG_HINT_CELL_BASE)
 			return;
 
-		qdf_event_reset(&hdd_ctx->regulatory_update_event);
-		qdf_mutex_acquire(&hdd_ctx->regulatory_status_lock);
-		hdd_ctx->is_regulatory_update_in_progress = true;
-		qdf_mutex_release(&hdd_ctx->regulatory_status_lock);
-
 		qdf_mem_copy(country, request->alpha2, QDF_MIN(
 			     sizeof(request->alpha2), sizeof(country)));
 		status = ucfg_reg_set_country(hdd_ctx->pdev, country);
@@ -945,12 +921,8 @@ void hdd_reg_notifier(struct wiphy *wiphy,
 		break;
 	}
 
-	if (QDF_IS_STATUS_ERROR(status)) {
+	if (QDF_IS_STATUS_ERROR(status))
 		hdd_err("Failed to set country");
-		qdf_mutex_acquire(&hdd_ctx->regulatory_status_lock);
-		hdd_ctx->is_regulatory_update_in_progress = false;
-		qdf_mutex_release(&hdd_ctx->regulatory_status_lock);
-	}
 }
 #else
 void hdd_reg_notifier(struct wiphy *wiphy,
@@ -1425,18 +1397,12 @@ static void hdd_country_change_update_sta(struct hdd_context *hdd_ctx)
 	bool freq_changed, phy_changed;
 	qdf_freq_t oper_freq;
 	eCsrPhyMode csr_phy_mode;
-	wlan_net_dev_ref_dbgid dbgid = NET_DEV_HOLD_COUNTRY_CHANGE_UPDATE_STA;
 
 	pdev = hdd_ctx->pdev;
 
-	hdd_for_each_adapter_dev_held_safe(hdd_ctx, adapter, next_adapter,
-					   dbgid) {
+	hdd_for_each_adapter_dev_held_safe(hdd_ctx, adapter, next_adapter) {
 		oper_freq = hdd_get_adapter_home_channel(adapter);
-		if (oper_freq)
-			freq_changed = wlan_reg_is_disable_for_freq(pdev,
-								    oper_freq);
-		else
-			freq_changed = false;
+		freq_changed = wlan_reg_is_disable_for_freq(pdev, oper_freq);
 
 		switch (adapter->device_mode) {
 		case QDF_P2P_CLIENT_MODE:
@@ -1467,7 +1433,7 @@ static void hdd_country_change_update_sta(struct hdd_context *hdd_ctx)
 			break;
 		}
 		/* dev_put has to be done here */
-		hdd_adapter_dev_put_debug(adapter, dbgid);
+		dev_put(adapter->dev);
 	}
 }
 
@@ -1559,12 +1525,10 @@ static void hdd_country_change_update_sap(struct hdd_context *hdd_ctx)
 	bool phy_changed;
 	qdf_freq_t oper_freq;
 	eCsrPhyMode csr_phy_mode;
-	wlan_net_dev_ref_dbgid dbgid = NET_DEV_HOLD_COUNTRY_CHANGE_UPDATE_SAP;
 
 	pdev = hdd_ctx->pdev;
 
-	hdd_for_each_adapter_dev_held_safe(hdd_ctx, adapter, next_adapter,
-					   dbgid) {
+	hdd_for_each_adapter_dev_held_safe(hdd_ctx, adapter, next_adapter) {
 		oper_freq = hdd_get_adapter_home_channel(adapter);
 
 		switch (adapter->device_mode) {
@@ -1597,7 +1561,7 @@ static void hdd_country_change_update_sap(struct hdd_context *hdd_ctx)
 			break;
 		}
 		/* dev_put has to be done here */
-		hdd_adapter_dev_put_debug(adapter, dbgid);
+		dev_put(adapter->dev);
 	}
 }
 
@@ -1610,12 +1574,6 @@ static void __hdd_country_change_work_handle(struct hdd_context *hdd_ctx)
 	hdd_country_change_update_sta(hdd_ctx);
 	sme_generic_change_country_code(hdd_ctx->mac_handle,
 					hdd_ctx->reg.alpha2);
-
-	qdf_event_set(&hdd_ctx->regulatory_update_event);
-	qdf_mutex_acquire(&hdd_ctx->regulatory_status_lock);
-	hdd_ctx->is_regulatory_update_in_progress = false;
-	qdf_mutex_release(&hdd_ctx->regulatory_status_lock);
-
 	hdd_country_change_update_sap(hdd_ctx);
 }
 
@@ -1663,12 +1621,6 @@ static void hdd_regulatory_dyn_cbk(struct wlan_objmgr_psoc *psoc,
 	wiphy = pdev_priv->wiphy;
 	hdd_ctx = wiphy_priv(wiphy);
 
-	if (avoid_freq_ind) {
-		hdd_ch_avoid_ind(hdd_ctx, &avoid_freq_ind->chan_list,
-				 &avoid_freq_ind->freq_list);
-		return;
-	}
-
 	hdd_debug("process channel list update from regulatory");
 	hdd_regulatory_chanlist_dump(chan_list);
 
@@ -1689,8 +1641,14 @@ static void hdd_regulatory_dyn_cbk(struct wlan_objmgr_psoc *psoc,
 		hdd_send_wiphy_regd_sync_event(hdd_ctx);
 #endif
 
-	hdd_config_tdls_with_band_switch(hdd_ctx);
-	qdf_sched_work(0, &hdd_ctx->country_change_work);
+	if (avoid_freq_ind) {
+		hdd_ch_avoid_ind(hdd_ctx, &avoid_freq_ind->chan_list,
+				&avoid_freq_ind->freq_list);
+	} else {
+		hdd_config_tdls_with_band_switch(hdd_ctx);
+
+		qdf_sched_work(0, &hdd_ctx->country_change_work);
+	}
 }
 
 int hdd_update_regulatory_config(struct hdd_context *hdd_ctx)
@@ -1700,26 +1658,6 @@ int hdd_update_regulatory_config(struct hdd_context *hdd_ctx)
 	reg_program_config_vars(hdd_ctx, &config_vars);
 	ucfg_reg_set_config_vars(hdd_ctx->psoc, config_vars);
 	return 0;
-}
-
-int hdd_init_regulatory_update_event(struct hdd_context *hdd_ctx)
-{
-	QDF_STATUS status;
-
-	status = qdf_event_create(&hdd_ctx->regulatory_update_event);
-	if (QDF_IS_STATUS_ERROR(status)) {
-		hdd_err("Failed to create regulatory update event");
-		goto failure;
-	}
-	status = qdf_mutex_create(&hdd_ctx->regulatory_status_lock);
-	if (QDF_IS_STATUS_ERROR(status)) {
-		hdd_err("Failed to create regulatory status mutex");
-		goto failure;
-	}
-	hdd_ctx->is_regulatory_update_in_progress = false;
-
-failure:
-	return qdf_status_to_os_return(status);
 }
 
 int hdd_regulatory_init(struct hdd_context *hdd_ctx, struct wiphy *wiphy)
@@ -1739,6 +1677,7 @@ int hdd_regulatory_init(struct hdd_context *hdd_ctx, struct wiphy *wiphy)
 	ucfg_reg_register_chan_change_callback(hdd_ctx->psoc,
 					       hdd_regulatory_dyn_cbk,
 					       NULL);
+
 
 	wiphy->regulatory_flags |= REGULATORY_WIPHY_SELF_MANAGED;
 	/* Check the kernel version for upstream commit aced43ce780dc5 that
@@ -1797,18 +1736,6 @@ int hdd_regulatory_init(struct hdd_context *hdd_ctx, struct wiphy *wiphy)
 	return 0;
 }
 #endif
-
-void hdd_deinit_regulatory_update_event(struct hdd_context *hdd_ctx)
-{
-	QDF_STATUS status;
-
-	status = qdf_event_destroy(&hdd_ctx->regulatory_update_event);
-	if (QDF_IS_STATUS_ERROR(status))
-		hdd_err("Failed to destroy regulatory update event");
-	status = qdf_mutex_destroy(&hdd_ctx->regulatory_status_lock);
-	if (QDF_IS_STATUS_ERROR(status))
-		hdd_err("Failed to destroy regulatory status mutex");
-}
 
 void hdd_regulatory_deinit(struct hdd_context *hdd_ctx)
 {

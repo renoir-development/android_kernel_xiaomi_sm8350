@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -324,7 +324,6 @@ struct wlan_ipa_priv;
  * @interface_lock: Interface lock
  * @ifa_address: Interface address
  * @stats: Interface stats
- * @bssid: BSSID. valid only for sta iface ctx;
  */
 struct wlan_ipa_iface_context {
 	struct wlan_ipa_priv *ipa_ctx;
@@ -335,14 +334,10 @@ struct wlan_ipa_iface_context {
 	uint8_t iface_id;       /* This iface ID */
 	qdf_netdev_t dev;
 	enum QDF_OPMODE device_mode;
-	uint8_t mac_addr[QDF_MAC_ADDR_SIZE];
-	qdf_atomic_t conn_count;
-	qdf_atomic_t disconn_count;
 	uint8_t session_id;
 	qdf_spinlock_t interface_lock;
 	uint32_t ifa_address;
 	struct wlan_ipa_iface_stats stats;
-	struct qdf_mac_addr bssid;
 };
 
 /**
@@ -362,7 +357,6 @@ struct wlan_ipa_iface_context {
  * @num_tx_dequeued: Number of TX dequeued
  * @num_max_pm_queue: Number of packets in PM queue
  * @num_rx_excep: Number of RX IPA exception packets
- * @num_rx_no_iface_eapol: No of EAPOL pkts before iface setup
  * @num_tx_fwd_ok: Number of TX forward packet success
  * @num_tx_fwd_err: Number of TX forward packet failures
  */
@@ -383,7 +377,6 @@ struct wlan_ipa_stats {
 	uint64_t num_tx_dequeued;
 	uint64_t num_max_pm_queue;
 	uint64_t num_rx_excep;
-	uint64_t num_rx_no_iface_eapol;
 	uint64_t num_tx_fwd_ok;
 	uint64_t num_tx_fwd_err;
 };
@@ -686,7 +679,6 @@ struct wlan_ipa_priv {
 	qdf_mc_timer_t rt_debug_fill_timer;
 	qdf_mutex_t rt_debug_lock;
 	qdf_mutex_t ipa_lock;
-	qdf_mutex_t init_deinit_lock;
 
 	uint8_t vdev_to_iface[WLAN_IPA_MAX_SESSION];
 	bool vdev_offload_enabled[WLAN_IPA_MAX_SESSION];

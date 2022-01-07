@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -26,35 +26,6 @@
 #include <dp_rx.h>
 #include <ce_api.h>
 #include <ce_internal.h>
-#include <wlan_cfg.h>
-
-/**
- * dp_rx_refill_thread_schedule() - Schedule rx refill thread
- * @soc: ol_txrx_soc_handle object
- *
- */
-#ifdef WLAN_FEATURE_RX_PREALLOC_BUFFER_POOL
-static void dp_rx_refill_thread_schedule(ol_txrx_soc_handle soc)
-{
-	struct dp_rx_refill_thread *rx_thread;
-	struct dp_txrx_handle *dp_ext_hdl;
-
-	if (!soc)
-		return;
-
-	dp_ext_hdl = cdp_soc_get_dp_txrx_handle(soc);
-	if (!dp_ext_hdl)
-		return;
-
-	rx_thread = &dp_ext_hdl->refill_thread;
-	qdf_set_bit(RX_REFILL_POST_EVENT, &rx_thread->event_flag);
-	qdf_wake_up_interruptible(&rx_thread->wait_q);
-}
-#else
-static void dp_rx_refill_thread_schedule(ol_txrx_soc_handle soc)
-{
-}
-#endif
 
 QDF_STATUS dp_txrx_init(ol_txrx_soc_handle soc, uint8_t pdev_id,
 			struct dp_txrx_config *config)
@@ -63,7 +34,6 @@ QDF_STATUS dp_txrx_init(ol_txrx_soc_handle soc, uint8_t pdev_id,
 	QDF_STATUS qdf_status = QDF_STATUS_SUCCESS;
 	uint8_t num_dp_rx_threads;
 	struct dp_pdev *pdev;
-	struct dp_soc *dp_soc;
 
 	if (qdf_unlikely(!soc)) {
 		dp_err("soc is NULL");
@@ -91,21 +61,6 @@ QDF_STATUS dp_txrx_init(ol_txrx_soc_handle soc, uint8_t pdev_id,
 	dp_ext_hdl->rx_tm_hdl.txrx_handle_cmn =
 				dp_txrx_get_cmn_hdl_frm_ext_hdl(dp_ext_hdl);
 
-	dp_soc = cdp_soc_t_to_dp_soc(soc);
-	if (wlan_cfg_is_rx_refill_buffer_pool_enabled(dp_soc->wlan_cfg_ctx)) {
-		dp_ext_hdl->refill_thread.soc = soc;
-		dp_ext_hdl->refill_thread.enabled = true;
-		qdf_status =
-			dp_rx_refill_thread_init(&dp_ext_hdl->refill_thread);
-		if (qdf_status != QDF_STATUS_SUCCESS) {
-			dp_err("Failed to initialize RX refill thread status:%d",
-			       qdf_status);
-			return qdf_status;
-		}
-		cdp_register_rx_refill_thread_sched_handler(soc,
-						dp_rx_refill_thread_schedule);
-	}
-
 	num_dp_rx_threads = cdp_get_num_rx_contexts(soc);
 
 	if (dp_ext_hdl->config.enable_rx_threads) {
@@ -119,7 +74,6 @@ QDF_STATUS dp_txrx_init(ol_txrx_soc_handle soc, uint8_t pdev_id,
 QDF_STATUS dp_txrx_deinit(ol_txrx_soc_handle soc)
 {
 	struct dp_txrx_handle *dp_ext_hdl;
-	struct dp_soc *dp_soc;
 
 	if (!soc)
 		return QDF_STATUS_E_INVAL;
@@ -127,13 +81,6 @@ QDF_STATUS dp_txrx_deinit(ol_txrx_soc_handle soc)
 	dp_ext_hdl = cdp_soc_get_dp_txrx_handle(soc);
 	if (!dp_ext_hdl)
 		return QDF_STATUS_E_FAULT;
-
-	dp_soc = cdp_soc_t_to_dp_soc(soc);
-	if (wlan_cfg_is_rx_refill_buffer_pool_enabled(dp_soc->wlan_cfg_ctx)) {
-		dp_rx_refill_thread_deinit(&dp_ext_hdl->refill_thread);
-		dp_ext_hdl->refill_thread.soc = NULL;
-		dp_ext_hdl->refill_thread.enabled = false;
-	}
 
 	if (dp_ext_hdl->config.enable_rx_threads)
 		dp_rx_tm_deinit(&dp_ext_hdl->rx_tm_hdl);
@@ -192,23 +139,20 @@ int dp_rx_tm_get_pending(ol_txrx_soc_handle soc)
 
 #ifdef DP_MEM_PRE_ALLOC
 
-/* Max entries in FISA Flow table */
-#define FISA_RX_FT_SIZE 128
-
 /* Num elements in REO ring */
 #define REO_DST_RING_SIZE 1024
 
 /* Num elements in TCL Data ring */
-#define TCL_DATA_RING_SIZE 5120
+#define TCL_DATA_RING_SIZE 3072
 
 /* Num elements in WBM2SW ring */
-#define WBM2SW_RELEASE_RING_SIZE 8192
+#define WBM2SW_RELEASE_RING_SIZE 4096
 
 /* Num elements in WBM Idle Link */
 #define WBM_IDLE_LINK_RING_SIZE (32 * 1024)
 
 /* Num TX desc in TX desc pool */
-#define DP_TX_DESC_POOL_SIZE 6144
+#define DP_TX_DESC_POOL_SIZE 4096
 
 /**
  * struct dp_consistent_prealloc - element representing DP pre-alloc memory
@@ -272,55 +216,17 @@ struct dp_consistent_prealloc_unaligned {
  * @ctxt_type: DP context type
  * @size: size of pre-alloc memory
  * @in_use: check if element is being used
- * @is_critical: critical prealloc failure would cause prealloc_init to fail
  * @addr: address of memory allocated
  */
 struct dp_prealloc_context {
 	enum dp_ctxt_type ctxt_type;
 	uint32_t size;
 	bool in_use;
-	bool is_critical;
 	void *addr;
 };
 
 static struct dp_prealloc_context g_dp_context_allocs[] = {
-	{DP_PDEV_TYPE, (sizeof(struct dp_pdev)), false,  true, NULL},
-#ifdef WLAN_FEATURE_DP_RX_RING_HISTORY
-	/* 4 Rx ring history */
-	{DP_RX_RING_HIST_TYPE, sizeof(struct dp_rx_history), false, false,
-	 NULL},
-	{DP_RX_RING_HIST_TYPE, sizeof(struct dp_rx_history), false, false,
-	 NULL},
-	{DP_RX_RING_HIST_TYPE, sizeof(struct dp_rx_history), false, false,
-	 NULL},
-	{DP_RX_RING_HIST_TYPE, sizeof(struct dp_rx_history), false, false,
-	 NULL},
-	/* 1 Rx error ring history */
-	{DP_RX_ERR_RING_HIST_TYPE, sizeof(struct dp_rx_err_history),
-	 false, false, NULL},
-#ifndef RX_DEFRAG_DO_NOT_REINJECT
-	/* 1 Rx reinject ring history */
-	{DP_RX_REINJECT_RING_HIST_TYPE, sizeof(struct dp_rx_reinject_history),
-	 false, false, NULL},
-#endif	/* RX_DEFRAG_DO_NOT_REINJECT */
-	/* 1 Rx refill ring history */
-	{DP_RX_REFILL_RING_HIST_TYPE, sizeof(struct dp_rx_refill_history),
-	false, false, NULL},
-#endif	/* WLAN_FEATURE_DP_RX_RING_HISTORY */
-#ifdef DP_TX_HW_DESC_HISTORY
-	{DP_TX_HW_DESC_HIST_TYPE, sizeof(struct dp_tx_hw_desc_history),
-	false, false, NULL},
-#endif
-#ifdef WLAN_FEATURE_DP_TX_DESC_HISTORY
-	{DP_TX_TCL_HIST_TYPE, sizeof(struct dp_tx_tcl_history),
-	 false, false, NULL},
-	{DP_TX_COMP_HIST_TYPE, sizeof(struct dp_tx_comp_history),
-	 false, false, NULL},
-#endif	/* WLAN_FEATURE_DP_TX_DESC_HISTORY */
-#ifdef WLAN_SUPPORT_RX_FISA
-	{DP_FISA_RX_FT_TYPE, sizeof(struct dp_fisa_rx_sw_ft) * FISA_RX_FT_SIZE,
-	 false, true, NULL},
-#endif
+	{DP_PDEV_TYPE, (sizeof(struct dp_pdev)), false,  NULL}
 };
 
 static struct  dp_consistent_prealloc g_dp_consistent_allocs[] = {
@@ -517,7 +423,7 @@ void dp_prealloc_deinit(void)
 
 	for (i = 0; i < QDF_ARRAY_SIZE(g_dp_context_allocs); i++) {
 		cp = &g_dp_context_allocs[i];
-		if (qdf_unlikely(cp->in_use))
+		if (qdf_unlikely(up->in_use))
 			dp_warn("i %d: context in use while free", i);
 
 		if (cp->addr) {
@@ -547,7 +453,7 @@ QDF_STATUS dp_prealloc_init(void)
 		cp = &g_dp_context_allocs[i];
 		cp->addr = qdf_mem_malloc(cp->size);
 
-		if (qdf_unlikely(!cp->addr) && cp->is_critical) {
+		if (qdf_unlikely(!cp->addr)) {
 			dp_warn("i %d: unable to preallocate %d bytes memory!",
 				i, cp->size);
 			break;
@@ -648,8 +554,7 @@ void *dp_prealloc_get_context_memory(uint32_t ctxt_type)
 	for (i = 0; i < QDF_ARRAY_SIZE(g_dp_context_allocs); i++) {
 		cp = &g_dp_context_allocs[i];
 
-		if ((ctxt_type == cp->ctxt_type) && !cp->in_use &&
-		    cp->addr) {
+		if ((ctxt_type == cp->ctxt_type) && !cp->in_use) {
 			cp->in_use = true;
 			return cp->addr;
 		}
@@ -662,9 +567,6 @@ QDF_STATUS dp_prealloc_put_context_memory(uint32_t ctxt_type, void *vaddr)
 {
 	int i;
 	struct dp_prealloc_context *cp;
-
-	if (!vaddr)
-		return QDF_STATUS_E_FAILURE;
 
 	for (i = 0; i < QDF_ARRAY_SIZE(g_dp_context_allocs); i++) {
 		cp = &g_dp_context_allocs[i];
@@ -707,9 +609,9 @@ void *dp_prealloc_get_coherent(uint32_t *size, void **base_vaddr_unaligned,
 	}
 
 	if (i == QDF_ARRAY_SIZE(g_dp_consistent_allocs))
-		dp_info("unable to allocate memory for ring type %s (%d) size %d",
+		dp_err("unable to allocate memory for ring type %s (%d) size %d",
 			dp_srng_get_str_from_hal_ring_type(ring_type),
-			ring_type, *size);
+			ring_type, p->size);
 	return va_aligned;
 }
 

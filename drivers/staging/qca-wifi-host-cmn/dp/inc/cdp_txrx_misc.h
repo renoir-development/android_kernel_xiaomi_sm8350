@@ -664,29 +664,6 @@ cdp_register_rx_mic_error_ind_handler(ol_txrx_soc_handle soc,
 	soc->ol_ops->rx_mic_error = rx_mic_cb;
 }
 
-typedef void (*rx_refill_thread_sched_cb)(ol_txrx_soc_handle soc);
-
-/**
- * cdp_register_rx_refill_thread_sched_handler() - API to register RX refill
- *                                                 thread schedule handler
- *
- * @soc: soc handle
- *
- * Return: void
- */
-static inline void
-cdp_register_rx_refill_thread_sched_handler(ol_txrx_soc_handle soc,
-					    rx_refill_thread_sched_cb rx_sched_cb)
-{
-	if (!soc || !soc->ol_ops) {
-		QDF_TRACE(QDF_MODULE_ID_DP, QDF_TRACE_LEVEL_FATAL,
-			  "%s invalid instance", __func__);
-		return;
-	}
-
-	soc->ol_ops->dp_rx_sched_refill_thread = rx_sched_cb;
-}
-
 /**
  * cdp_pdev_reset_driver_del_ack() - reset driver TCP delayed ack flag
  * @soc: data path soc handle
@@ -816,25 +793,6 @@ cdp_request_rx_hw_stats(ol_txrx_soc_handle soc, uint8_t vdev_id)
 		return soc->ops->misc_ops->request_rx_hw_stats(soc, vdev_id);
 
 	return QDF_STATUS_SUCCESS;
-}
-
-/**
- * cdp_reset_rx_hw_ext_stats(): reset rx hw ext stats
- * @soc: soc handle
- *
- * Return: none
- */
-static inline void
-cdp_reset_rx_hw_ext_stats(ol_txrx_soc_handle soc)
-{
-	if (!soc || !soc->ops || !soc->ops->misc_ops) {
-		QDF_TRACE(QDF_MODULE_ID_CDP, QDF_TRACE_LEVEL_DEBUG,
-			  "%s: Invalid Instance:", __func__);
-		return;
-	}
-
-	if (soc->ops->misc_ops->reset_rx_hw_ext_stats)
-		soc->ops->misc_ops->reset_rx_hw_ext_stats(soc);
 }
 
 /**

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -21,9 +21,6 @@
  * internally in pkt_capture component only.
  */
 
-#ifdef WLAN_FEATURE_PKT_CAPTURE_V2
-#include <dp_types.h>
-#endif
 #include "wlan_pkt_capture_main.h"
 #include "cfg_ucfg_api.h"
 #include "wlan_pkt_capture_mon_thread.h"
@@ -31,294 +28,8 @@
 #include "target_if_pkt_capture.h"
 #include "cdp_txrx_ctrl.h"
 #include "wlan_pkt_capture_tgt_api.h"
-#include <cds_ieee80211_common.h>
 
 static struct wlan_objmgr_vdev *gp_pkt_capture_vdev;
-
-#ifdef WLAN_FEATURE_PKT_CAPTURE_V2
-wdi_event_subscribe PKT_CAPTURE_TX_SUBSCRIBER;
-wdi_event_subscribe PKT_CAPTURE_RX_SUBSCRIBER;
-wdi_event_subscribe PKT_CAPTURE_OFFLOAD_TX_SUBSCRIBER;
-
-/**
- * pkt_capture_wdi_event_subscribe() - Subscribe pkt capture callbacks
- * @psoc: pointer to psoc object
- *
- * Return: None
- */
-static void pkt_capture_wdi_event_subscribe(struct wlan_objmgr_psoc *psoc)
-{
-	void *soc = cds_get_context(QDF_MODULE_ID_SOC);
-	uint8_t pdev_id = WMI_PDEV_ID_SOC;
-
-	/* subscribing for tx data packets */
-	PKT_CAPTURE_TX_SUBSCRIBER.callback =
-				pkt_capture_callback;
-
-	PKT_CAPTURE_TX_SUBSCRIBER.context = wlan_psoc_get_dp_handle(psoc);
-
-	cdp_wdi_event_sub(soc, pdev_id, &PKT_CAPTURE_TX_SUBSCRIBER,
-			  WDI_EVENT_PKT_CAPTURE_TX_DATA);
-
-	/* subscribing for rx data packets */
-	PKT_CAPTURE_RX_SUBSCRIBER.callback =
-				pkt_capture_callback;
-
-	PKT_CAPTURE_RX_SUBSCRIBER.context = wlan_psoc_get_dp_handle(psoc);
-
-	cdp_wdi_event_sub(soc, pdev_id, &PKT_CAPTURE_RX_SUBSCRIBER,
-			  WDI_EVENT_PKT_CAPTURE_RX_DATA);
-
-	/* subscribing for offload tx data packets */
-	PKT_CAPTURE_OFFLOAD_TX_SUBSCRIBER.callback =
-				pkt_capture_callback;
-
-	PKT_CAPTURE_OFFLOAD_TX_SUBSCRIBER.context =
-						wlan_psoc_get_dp_handle(psoc);
-
-	cdp_wdi_event_sub(soc, pdev_id, &PKT_CAPTURE_OFFLOAD_TX_SUBSCRIBER,
-			  WDI_EVENT_PKT_CAPTURE_OFFLOAD_TX_DATA);
-}
-
-/**
- * pkt_capture_wdi_event_unsubscribe() - Unsubscribe pkt capture callbacks
- * @psoc: pointer to psoc object
- *
- * Return: None
- */
-static void pkt_capture_wdi_event_unsubscribe(struct wlan_objmgr_psoc *psoc)
-{
-	void *soc = cds_get_context(QDF_MODULE_ID_SOC);
-	uint8_t pdev_id = WMI_PDEV_ID_SOC;
-
-	/* unsubscribing for tx data packets */
-	cdp_wdi_event_unsub(soc, pdev_id, &PKT_CAPTURE_TX_SUBSCRIBER,
-			    WDI_EVENT_PKT_CAPTURE_TX_DATA);
-
-	/* unsubscribing for rx data packets */
-	cdp_wdi_event_unsub(soc, pdev_id, &PKT_CAPTURE_RX_SUBSCRIBER,
-			    WDI_EVENT_PKT_CAPTURE_RX_DATA);
-
-	/* unsubscribing for offload tx data packets */
-	cdp_wdi_event_unsub(soc, pdev_id, &PKT_CAPTURE_OFFLOAD_TX_SUBSCRIBER,
-			    WDI_EVENT_PKT_CAPTURE_OFFLOAD_TX_DATA);
-}
-
-enum pkt_capture_mode
-pkt_capture_get_pktcap_mode_v2()
-{
-	enum pkt_capture_mode mode = PACKET_CAPTURE_MODE_DISABLE;
-	struct pkt_capture_vdev_priv *vdev_priv;
-	struct wlan_objmgr_vdev *vdev;
-
-	vdev = pkt_capture_get_vdev();
-	if (!vdev)
-		return PACKET_CAPTURE_MODE_DISABLE;
-
-	vdev_priv = pkt_capture_vdev_get_priv(vdev);
-	if (!vdev_priv)
-		pkt_capture_err("vdev_priv is NULL");
-	else
-		mode = vdev_priv->cb_ctx->pkt_capture_mode;
-
-	return mode;
-}
-
-void pkt_capture_callback(void *soc, enum WDI_EVENT event, void *log_data,
-			  u_int16_t vdev_id, uint32_t status)
-{
-	uint8_t bssid[QDF_MAC_ADDR_SIZE];
-	uint8_t tid = 0, tx_retry_cnt = 0;
-	struct dp_soc *psoc = soc;
-
-	switch (event) {
-	case WDI_EVENT_PKT_CAPTURE_TX_DATA:
-	{
-		struct pkt_capture_tx_hdr_elem_t *ptr_pktcapture_hdr;
-		struct pkt_capture_tx_hdr_elem_t pktcapture_hdr = {0};
-		struct hal_tx_completion_status tx_comp_status = {0};
-		struct qdf_tso_seg_elem_t *tso_seg = NULL;
-		uint32_t txcap_hdr_size =
-				sizeof(struct pkt_capture_tx_hdr_elem_t);
-
-		struct dp_tx_desc_s *desc = log_data;
-		qdf_nbuf_t netbuf;
-		int nbuf_len;
-
-		hal_tx_comp_get_status(&desc->comp, &tx_comp_status,
-				       psoc->hal_soc);
-		if (!(pkt_capture_get_pktcap_mode_v2() &
-					PKT_CAPTURE_MODE_DATA_ONLY)) {
-			return;
-		}
-
-		pktcapture_hdr.timestamp = tx_comp_status.tsf;
-		pktcapture_hdr.preamble = tx_comp_status.pkt_type;
-		pktcapture_hdr.mcs = tx_comp_status.mcs;
-		pktcapture_hdr.bw = tx_comp_status.bw;
-		/* nss not available */
-		pktcapture_hdr.nss = 0;
-		pktcapture_hdr.rssi_comb = tx_comp_status.ack_frame_rssi;
-		/* rate not available */
-		pktcapture_hdr.rate = 0;
-		pktcapture_hdr.stbc = tx_comp_status.stbc;
-		pktcapture_hdr.sgi = tx_comp_status.sgi;
-		pktcapture_hdr.ldpc = tx_comp_status.ldpc;
-		/* Beamformed not available */
-		pktcapture_hdr.beamformed = 0;
-		pktcapture_hdr.framectrl = IEEE80211_FC0_TYPE_DATA |
-					   (IEEE80211_FC1_DIR_TODS << 8);
-		pktcapture_hdr.tx_retry_cnt = tx_comp_status.transmit_cnt;
-		/* seqno not available */
-		pktcapture_hdr.seqno = 0;
-		tid = tx_comp_status.tid;
-		status = tx_comp_status.status;
-
-		if (desc->frm_type == dp_tx_frm_tso) {
-			if (!desc->tso_desc)
-				return;
-			tso_seg = desc->tso_desc;
-			nbuf_len = tso_seg->seg.total_len;
-		} else {
-			nbuf_len = qdf_nbuf_len(desc->nbuf);
-		}
-
-		netbuf = qdf_nbuf_alloc(NULL,
-					roundup(nbuf_len + RESERVE_BYTES, 4),
-					RESERVE_BYTES, 4, false);
-
-		if (!netbuf)
-			return;
-
-		qdf_nbuf_put_tail(netbuf, nbuf_len);
-
-		if (desc->frm_type == dp_tx_frm_tso) {
-			uint8_t frag_cnt, num_frags = 0;
-			int frag_len = 0;
-			uint32_t tcp_seq_num;
-			uint16_t ip_len;
-
-			if (tso_seg->seg.num_frags > 0)
-				num_frags = tso_seg->seg.num_frags - 1;
-
-			/*Num of frags in a tso seg cannot be less than 2 */
-			if (num_frags < 1) {
-				pkt_capture_err("num of frags in tso segment is %d\n",
-						(num_frags + 1));
-				qdf_nbuf_free(netbuf);
-				return;
-			}
-
-			tcp_seq_num = tso_seg->seg.tso_flags.tcp_seq_num;
-			tcp_seq_num = qdf_cpu_to_be32(tcp_seq_num);
-
-			ip_len = tso_seg->seg.tso_flags.ip_len;
-			ip_len = qdf_cpu_to_be16(ip_len);
-
-			for (frag_cnt = 0; frag_cnt <= num_frags; frag_cnt++) {
-				qdf_mem_copy(
-				qdf_nbuf_data(netbuf) + frag_len,
-				tso_seg->seg.tso_frags[frag_cnt].vaddr,
-				tso_seg->seg.tso_frags[frag_cnt].length);
-				frag_len +=
-					tso_seg->seg.tso_frags[frag_cnt].length;
-			}
-
-			qdf_mem_copy((qdf_nbuf_data(netbuf) +
-				     IPV4_PKT_LEN_OFFSET),
-				     &ip_len, sizeof(ip_len));
-			qdf_mem_copy((qdf_nbuf_data(netbuf) +
-				     IPV4_TCP_SEQ_NUM_OFFSET),
-				     &tcp_seq_num, sizeof(tcp_seq_num));
-		} else {
-			qdf_mem_copy(qdf_nbuf_data(netbuf),
-				     qdf_nbuf_data(desc->nbuf), nbuf_len);
-		}
-
-		if (qdf_unlikely(qdf_nbuf_headroom(netbuf) < txcap_hdr_size)) {
-			netbuf = qdf_nbuf_realloc_headroom(netbuf,
-							   txcap_hdr_size);
-			if (!netbuf) {
-				QDF_TRACE(QDF_MODULE_ID_PKT_CAPTURE,
-					  QDF_TRACE_LEVEL_ERROR,
-					  FL("No headroom"));
-				return;
-			}
-		}
-
-		if (!qdf_nbuf_push_head(netbuf, txcap_hdr_size)) {
-			QDF_TRACE(QDF_MODULE_ID_PKT_CAPTURE,
-				  QDF_TRACE_LEVEL_ERROR, FL("No headroom"));
-			qdf_nbuf_free(netbuf);
-			return;
-		}
-
-		ptr_pktcapture_hdr =
-		(struct pkt_capture_tx_hdr_elem_t *)qdf_nbuf_data(netbuf);
-		qdf_mem_copy(ptr_pktcapture_hdr, &pktcapture_hdr,
-			     txcap_hdr_size);
-
-		pkt_capture_datapkt_process(
-			vdev_id, netbuf, TXRX_PROCESS_TYPE_DATA_TX_COMPL,
-			tid, status, TXRX_PKTCAPTURE_PKT_FORMAT_8023,
-			bssid, NULL, tx_retry_cnt);
-
-		break;
-	}
-
-	case WDI_EVENT_PKT_CAPTURE_RX_DATA:
-	{
-		if (!(pkt_capture_get_pktcap_mode_v2() &
-					PKT_CAPTURE_MODE_DATA_ONLY))
-			return;
-
-		pkt_capture_msdu_process_pkts(bssid, log_data, vdev_id, soc,
-					      status);
-		break;
-	}
-
-	case WDI_EVENT_PKT_CAPTURE_OFFLOAD_TX_DATA:
-	{
-		struct htt_tx_offload_deliver_ind_hdr_t *offload_deliver_msg;
-		bool is_pkt_during_roam = false;
-		uint32_t freq = 0;
-
-		if (!(pkt_capture_get_pktcap_mode_v2() &
-					PKT_CAPTURE_MODE_DATA_ONLY))
-			return;
-
-		offload_deliver_msg =
-		(struct htt_tx_offload_deliver_ind_hdr_t *)log_data;
-		is_pkt_during_roam =
-		(offload_deliver_msg->reserved_2 ? true : false);
-
-		if (is_pkt_during_roam) {
-			vdev_id = HTT_INVALID_VDEV;
-			freq =
-			(uint32_t)offload_deliver_msg->reserved_3;
-		} else {
-			vdev_id = offload_deliver_msg->vdev_id;
-		}
-
-		pkt_capture_offload_deliver_indication_handler(
-						log_data,
-						vdev_id, bssid, soc);
-	}
-
-	default:
-		break;
-	}
-}
-
-#else
-static void pkt_capture_wdi_event_subscribe(struct wlan_objmgr_psoc *psoc)
-{
-}
-
-static void pkt_capture_wdi_event_unsubscribe(struct wlan_objmgr_psoc *psoc)
-{
-}
-#endif
 
 struct wlan_objmgr_vdev *pkt_capture_get_vdev()
 {
@@ -381,7 +92,6 @@ pkt_capture_register_callbacks(struct wlan_objmgr_vdev *vdev,
 
 	target_if_pkt_capture_register_tx_ops(&vdev_priv->tx_ops);
 	target_if_pkt_capture_register_rx_ops(&vdev_priv->rx_ops);
-	pkt_capture_wdi_event_subscribe(psoc);
 	pkt_capture_record_channel(vdev);
 
 	status = tgt_pkt_capture_register_ev_handler(vdev);
@@ -459,7 +169,6 @@ QDF_STATUS pkt_capture_deregister_callbacks(struct wlan_objmgr_vdev *vdev)
 	wait_for_completion(&vdev_priv->mon_ctx->mon_register_event);
 	pkt_capture_drop_monpkt(vdev_priv->mon_ctx);
 
-	pkt_capture_wdi_event_unsubscribe(psoc);
 	status = tgt_pkt_capture_unregister_ev_handler(vdev);
 	if (QDF_IS_STATUS_ERROR(status))
 		pkt_capture_err("Unable to unregister event handlers");

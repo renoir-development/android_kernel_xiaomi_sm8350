@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -27,6 +27,16 @@
 				"he_control", \
 				0, \
 				"HE Control")
+
+#define CFG_HE_TWT_REQUESTOR CFG_BOOL( \
+				"he_twt_requestor", \
+				0, \
+				"HE Twt Requestor")
+
+#define CFG_HE_TWT_RESPONDER CFG_BOOL( \
+				"he_twt_responder", \
+				0, \
+				"HE Twt Responder")
 
 #define CFG_HE_FRAGMENTATION CFG_UINT( \
 				"he_fragmentation", \
@@ -90,6 +100,11 @@
 				"he_buffer_status_rpt", \
 				0, \
 				"HE Buffer Status Rpt")
+
+#define CFG_HE_BCAST_TWT CFG_BOOL( \
+				"he_bcast_twt", \
+				0, \
+				"HE Bcast twt")
 
 #define CFG_HE_BA_32BIT CFG_BOOL( \
 				"he_ba_32bit", \
@@ -733,6 +748,8 @@
 
 #define CFG_HE_CAPS_ALL \
 	CFG(CFG_HE_CONTROL) \
+	CFG(CFG_HE_TWT_REQUESTOR) \
+	CFG(CFG_HE_TWT_RESPONDER) \
 	CFG(CFG_HE_FRAGMENTATION) \
 	CFG(CFG_HE_MAX_FRAG_MSDU) \
 	CFG(CFG_HE_MIN_FRAG_SIZE) \
@@ -742,6 +759,7 @@
 	CFG(CFG_HE_ALL_ACK) \
 	CFG(CFG_HE_TRIGD_RSP_SCHEDULING) \
 	CFG(CFG_HE_BUFFER_STATUS_RPT) \
+	CFG(CFG_HE_BCAST_TWT) \
 	CFG(CFG_HE_BA_32BIT) \
 	CFG(CFG_HE_MU_CASCADING) \
 	CFG(CFG_HE_MULTI_TID) \

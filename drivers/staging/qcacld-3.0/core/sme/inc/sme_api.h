@@ -964,6 +964,10 @@ QDF_STATUS sme_update_is_fast_roam_ini_feature_enabled(mac_handle_t mac_handle,
 		const bool
 		isFastRoamIniFeatureEnabled);
 
+#ifndef ROAM_OFFLOAD_V1
+QDF_STATUS sme_config_fast_roaming(mac_handle_t mac_handle, uint8_t session_id,
+				   const bool is_fast_roam_enabled);
+#endif
 QDF_STATUS sme_stop_roaming(mac_handle_t mac_handle, uint8_t sessionId,
 			    uint8_t reason,
 			    enum wlan_cm_rso_control_requestor requestor);
@@ -1610,6 +1614,10 @@ QDF_STATUS sme_ext_scan_register_callback(mac_handle_t mac_handle,
 	return QDF_STATUS_SUCCESS;
 }
 #endif /* FEATURE_WLAN_EXTSCAN */
+
+#ifndef ROAM_OFFLOAD_V1
+QDF_STATUS sme_abort_roam_scan(mac_handle_t mac_handle, uint8_t sessionId);
+#endif
 
 /**
  * sme_get_vht_ch_width() - SME API to get the max supported FW chan width
@@ -2314,24 +2322,6 @@ QDF_STATUS sme_set_lost_link_info_cb(mac_handle_t mac_handle,
 QDF_STATUS sme_update_new_channel_event(mac_handle_t mac_handle,
 					uint8_t session_id);
 #ifdef WLAN_POWER_DEBUG
-/**
- * sme_reset_power_debug_stats_cb() - SME API to reset Power debug stats cb
- * @mac_handle: Opaque handle to the global MAC context
- *
- * Resets the power stats callback and context to NULL
- *
- * Return: None
- */
-void sme_reset_power_debug_stats_cb(mac_handle_t mac_handle);
-
-/**
- * sme_power_debug_stats_req() - SME API to collect Power debug stats
- * @mac_handle: Opaque handle to the global MAC context
- * @callback_fn: Pointer to the callback function for Power stats event
- * @power_stats_context: Pointer to context
- *
- * Return: QDF_STATUS
- */
 QDF_STATUS sme_power_debug_stats_req(
 		mac_handle_t mac_handle,
 		void (*callback_fn)(struct power_stats_response *response,
@@ -3662,24 +3652,33 @@ sme_test_config_twt_terminate(struct wmi_twt_del_dialog_param *params);
 QDF_STATUS sme_test_config_twt_setup(struct wmi_twt_add_dialog_param *params);
 
 /**
- * sme_clear_twt_complete_cb() - Initialize TWT callbacks
+ * sme_init_twt_complete_cb() - Initialize TWT callbacks
  * @mac_handle: MAC handle
  *
  * Return: QDF_STATUS_SUCCESS on Success, other QDF_STATUS error codes
  * on failure
  */
-QDF_STATUS sme_clear_twt_complete_cb(mac_handle_t mac_handle);
+QDF_STATUS sme_init_twt_complete_cb(mac_handle_t mac_handle);
 
 /**
- * sme_register_twt_callbacks() - TWT enable registrar
+ * sme_register_twt_enable_complete_cb() - TWT enable registrar
  * @mac_handle: MAC handle
- * @twt_cb: TWT callbacks
+ * @twt_enable_cb: Function callback to handle enable event
  *
- * Return: QDF_STATUS_SUCCESS on Success, other QDF_STATUS error codes
- * on failure
+ * Return: QDF Status
  */
-QDF_STATUS sme_register_twt_callbacks(mac_handle_t mac_handle,
-				      struct twt_callbacks *twt_cb);
+QDF_STATUS sme_register_twt_enable_complete_cb(mac_handle_t mac_handle,
+					       twt_enable_cb twt_enable_cb);
+
+/**
+ * sme_register_twt_disable_complete_cb() - TWT disable registrar
+ * @mac_handle: MAC handle
+ * @twt_disable_cb: Function callback to handle disable event
+ *
+ * Return: QDF Status
+ */
+QDF_STATUS sme_register_twt_disable_complete_cb(mac_handle_t mac_handle,
+						twt_disable_cb twt_disable_cb);
 
 /**
  * sme_add_dialog_cmd() - Register callback and send TWT add dialog
@@ -3687,12 +3686,14 @@ QDF_STATUS sme_register_twt_callbacks(mac_handle_t mac_handle,
  * @mac_handle: MAC handle
  * @twt_add_dialog_cb: Function callback to handle add_dialog event
  * @twt_params: TWT add dialog parameters
+ * @context: os_if_request cookie
  *
  * Return: QDF Status
  */
 QDF_STATUS sme_add_dialog_cmd(mac_handle_t mac_handle,
 			      twt_add_dialog_cb twt_add_dialog_cb,
-			      struct wmi_twt_add_dialog_param *twt_params);
+			      struct wmi_twt_add_dialog_param *twt_params,
+			      void *context);
 
 /**
  * sme_del_dialog_cmd() - Register callback and send TWT del dialog
@@ -3700,51 +3701,64 @@ QDF_STATUS sme_add_dialog_cmd(mac_handle_t mac_handle,
  * @mac_handle: MAC handle
  * @twt_del_dialog_cb: Function callback to handle del_dialog event
  * @twt_params: TWT del dialog parameters
+ * @context: os_if_request cookie
  *
  * Return: QDF Status
  */
 QDF_STATUS sme_del_dialog_cmd(mac_handle_t mac_handle,
 			      twt_del_dialog_cb del_dialog_cb,
-			      struct wmi_twt_del_dialog_param *twt_params);
+			      struct wmi_twt_del_dialog_param *twt_params,
+			      void *context);
 
 /**
  * sme_pause_dialog_cmd() - Register callback and send TWT pause dialog
  * command to firmware
  * @mac_handle: MAC handle
+ * @twt_pause_dialog_cb: Function callback to handle pause_dialog event
  * @twt_params: TWT pause dialog parameters
+ * @context: os_if_request cookie
  *
  * Return: QDF_STATUS_SUCCESS on Success, other QDF_STATUS error codes
  * on failure
  */
 QDF_STATUS
 sme_pause_dialog_cmd(mac_handle_t mac_handle,
-		     struct wmi_twt_pause_dialog_cmd_param *twt_params);
-
-/**
- * sme_nudge_dialog_cmd() - Register callback and send TWT nudge dialog
- * command to firmware
- * @mac_handle: MAC handle
- * @twt_params: TWT nudge dialog parameters
- *
- * Return: QDF_STATUS_SUCCESS on Success, other QDF_STATUS error codes
- * on failure
- */
-QDF_STATUS
-sme_nudge_dialog_cmd(mac_handle_t mac_handle,
-		     struct wmi_twt_nudge_dialog_cmd_param *twt_params);
+		     twt_pause_dialog_cb pause_dialog_cb,
+		     struct wmi_twt_pause_dialog_cmd_param *twt_params,
+		     void *context);
 
 /**
  * sme_resume_dialog_cmd() - Register callback and send TWT resume dialog
  * command to firmware
  * @mac_handle: MAC handle
+ * @twt_resume_dialog_cb: Function callback to handle resume_dialog event
  * @twt_params: TWT resume dialog parameters
+ * @context: os_if_request cookie
  *
  * Return: QDF_STATUS_SUCCESS on Success, other QDF_STATUS error codes
  * on failure
  */
 QDF_STATUS
 sme_resume_dialog_cmd(mac_handle_t mac_handle,
-		      struct wmi_twt_resume_dialog_cmd_param *twt_params);
+		      twt_resume_dialog_cb resume_dialog_cb,
+		      struct wmi_twt_resume_dialog_cmd_param *twt_params,
+		      void *context);
+
+/**
+ * sme_deregister_twt_enable_complete_cb() - TWT enable deregistrar
+ * @mac_handle: Opaque handle to the global MAC context
+ *
+ * Return: QDF Status
+ */
+QDF_STATUS sme_deregister_twt_enable_complete_cb(mac_handle_t mac_handle);
+
+/**
+ * sme_deregister_twt_disable_complete_cb() - TWT disable deregistrar
+ * @mac_handle: Opaque handle to the global MAC context
+ *
+ * Return: QDF Status
+ */
+QDF_STATUS sme_deregister_twt_disable_complete_cb(mac_handle_t mac_handle);
 #else
 
 static inline
@@ -4132,6 +4146,23 @@ void sme_chan_to_freq_list(
 			uint32_t *freq_list,
 			const uint8_t *chan_list,
 			uint32_t chan_list_len);
+
+#ifndef ROAM_OFFLOAD_V1
+/**
+ * sme_set_roam_triggers() - Send roam trigger bitmap to WMA
+ * @mac_handle: Opaque handle to the MAC context
+ * @triggers: Carries pointer of the object containing vdev id and
+ *	      roam_trigger_bitmap.
+ *
+ * Send the roam trigger bitmap received to WMA/WMI. WMI converts
+ * the bitmap to firmware compatible bitmap as per reasons
+ * defined @WMI_ROAM_TRIGGER_REASON_ID
+ *
+ * Return: QDF_STATUS
+ */
+QDF_STATUS sme_set_roam_triggers(mac_handle_t mac_handle,
+				 struct wlan_roam_triggers *triggers);
+#endif
 
 /**
  * sme_set_roam_config_enable() - Cache roam config status in SME

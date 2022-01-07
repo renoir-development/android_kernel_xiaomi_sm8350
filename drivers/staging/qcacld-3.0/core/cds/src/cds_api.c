@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -248,8 +248,6 @@ QDF_STATUS cds_init(void)
 	qdf_register_self_recovery_callback(cds_trigger_recovery_psoc);
 	qdf_register_fw_down_callback(cds_is_fw_down);
 	qdf_register_is_driver_unloading_callback(cds_is_driver_unloading);
-	qdf_register_is_driver_state_module_stop_callback(
-					cds_is_driver_state_module_stop);
 	qdf_register_recovering_state_query_callback(cds_is_driver_recovering);
 	qdf_register_drv_connected_callback(cds_is_drv_connected);
 	qdf_register_drv_supported_callback(cds_is_drv_supported);
@@ -278,7 +276,6 @@ void cds_deinit(void)
 	qdf_register_recovering_state_query_callback(NULL);
 	qdf_register_fw_down_callback(NULL);
 	qdf_register_is_driver_unloading_callback(NULL);
-	qdf_register_is_driver_state_module_stop_callback(NULL);
 	qdf_register_self_recovery_callback(NULL);
 	qdf_register_wmi_send_recv_qmi_callback(NULL);
 
@@ -653,18 +650,24 @@ QDF_STATUS cds_open(struct wlan_objmgr_psoc *psoc)
 	/* Initialize bug reporting structure */
 	cds_init_log_completion();
 
+	status = qdf_event_create(&gp_cds_context->wma_complete_event);
+	if (QDF_IS_STATUS_ERROR(status)) {
+		cds_alert("Unable to init wma_complete_event");
+		return status;
+	}
+
 	hdd_ctx = gp_cds_context->hdd_context;
 	if (!hdd_ctx || !hdd_ctx->config) {
 		cds_err("Hdd Context is Null");
 
 		status = QDF_STATUS_E_FAILURE;
-		return status;
+		goto err_wma_complete_event;
 	}
 
 	status = dispatcher_enable();
 	if (QDF_IS_STATUS_ERROR(status)) {
 		cds_err("Failed to enable dispatcher; status:%d", status);
-		return status;
+		goto err_wma_complete_event;
 	}
 
 	/* Now Open the CDS Scheduler */
@@ -888,6 +891,9 @@ err_sched_close:
 err_dispatcher_disable:
 	if (QDF_IS_STATUS_ERROR(dispatcher_disable()))
 		QDF_DEBUG_PANIC("Failed to disable dispatcher");
+
+err_wma_complete_event:
+	qdf_event_destroy(&gp_cds_context->wma_complete_event);
 
 	return status;
 } /* cds_open() */
@@ -1165,10 +1171,26 @@ err_mac_stop:
 	mac_stop(gp_cds_context->mac_context);
 
 err_wma_stop:
+	qdf_event_reset(&gp_cds_context->wma_complete_event);
 	qdf_status = wma_stop();
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 		cds_err("Failed to stop wma");
 		QDF_ASSERT(QDF_IS_STATUS_SUCCESS(qdf_status));
+		wma_setneedshutdown();
+	} else {
+		qdf_status =
+			qdf_wait_for_event_completion(
+					&gp_cds_context->wma_complete_event,
+					CDS_WMA_TIMEOUT);
+		if (qdf_status != QDF_STATUS_SUCCESS) {
+			if (qdf_status == QDF_STATUS_E_TIMEOUT) {
+				cds_alert("Timeout occurred before WMA_stop complete");
+			} else {
+				cds_alert("WMA_stop reporting other error");
+			}
+			QDF_ASSERT(0);
+			wma_setneedshutdown();
+		}
 	}
 
 	return QDF_STATUS_E_FAILURE;
@@ -1202,6 +1224,7 @@ QDF_STATUS cds_disable(struct wlan_objmgr_psoc *psoc)
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 		cds_err("Failed to stop wma");
 		QDF_ASSERT(QDF_IS_STATUS_SUCCESS(qdf_status));
+		wma_setneedshutdown();
 	}
 
 	handle = cds_get_context(QDF_MODULE_ID_PE);
@@ -1339,16 +1362,25 @@ QDF_STATUS cds_close(struct wlan_objmgr_psoc *psoc)
 	ucfg_pmo_psoc_update_dp_handle(psoc, NULL);
 	wlan_psoc_set_dp_handle(psoc, NULL);
 
-
-	qdf_status = wma_close();
-	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
-		cds_err("Failed to close wma");
-		QDF_ASSERT(QDF_IS_STATUS_SUCCESS(qdf_status));
+	if (true == wma_needshutdown()) {
+		cds_err("Failed to shutdown wma");
+	} else {
+		qdf_status = wma_close();
+		if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
+			cds_err("Failed to close wma");
+			QDF_ASSERT(QDF_IS_STATUS_SUCCESS(qdf_status));
+		}
 	}
 
 	qdf_status = wma_wmi_service_close();
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 		cds_err("Failed to close wma_wmi_service");
+		QDF_ASSERT(QDF_IS_STATUS_SUCCESS(qdf_status));
+	}
+
+	qdf_status = qdf_event_destroy(&gp_cds_context->wma_complete_event);
+	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
+		cds_err("failed to destroy wma_complete_event");
 		QDF_ASSERT(QDF_IS_STATUS_SUCCESS(qdf_status));
 	}
 
@@ -1902,9 +1934,9 @@ static void cds_trigger_recovery_handler(const char *func, const uint32_t line)
 		return;
 	}
 
+	/* ignore recovery if we are unloading; it would be a waste anyway */
 	if (cds_is_driver_unloading()) {
-		QDF_DEBUG_PANIC("WLAN is unloading recovery not expected(via %s:%d)",
-				func, line);
+		cds_info("WLAN is unloading; ignore recovery");
 		return;
 	}
 

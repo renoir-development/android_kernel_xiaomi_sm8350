@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -1060,11 +1060,6 @@ static void __hdd_hard_start_xmit(struct sk_buff *skb,
 	hdd_ctx = adapter->hdd_ctx;
 	if (wlan_hdd_validate_context(hdd_ctx))
 		goto drop_pkt;
-
-	if (hdd_ctx->hdd_wlan_suspended) {
-		hdd_err_rl("Device is system suspended, drop pkt");
-		goto drop_pkt;
-	}
 
 	wlan_hdd_classify_pkt(skb);
 	if (QDF_NBUF_CB_GET_PACKET_TYPE(skb) == QDF_NBUF_CB_PACKET_TYPE_ARP) {
@@ -2251,8 +2246,7 @@ QDF_STATUS hdd_rx_deliver_to_stack(struct hdd_adapter *adapter,
 	adapter->hdd_stats.tx_rx_stats.rx_non_aggregated++;
 
 	/* Account for GRO/LRO ineligible packets, mostly UDP */
-	if (qdf_nbuf_get_gso_segs(skb) == 0)
-		hdd_ctx->no_rx_offload_pkt_cnt++;
+	hdd_ctx->no_rx_offload_pkt_cnt++;
 
 	if (qdf_likely((hdd_ctx->enable_dp_rx_threads ||
 		        hdd_ctx->enable_rxthread) &&
@@ -2310,8 +2304,7 @@ QDF_STATUS hdd_rx_deliver_to_stack(struct hdd_adapter *adapter,
 	adapter->hdd_stats.tx_rx_stats.rx_non_aggregated++;
 
 	/* Account for GRO/LRO ineligible packets, mostly UDP */
-	if (qdf_nbuf_get_gso_segs(skb) == 0)
-		hdd_ctx->no_rx_offload_pkt_cnt++;
+	hdd_ctx->no_rx_offload_pkt_cnt++;
 
 	if (qdf_likely((hdd_ctx->enable_dp_rx_threads ||
 		        hdd_ctx->enable_rxthread) &&
@@ -2525,19 +2518,19 @@ QDF_STATUS hdd_rx_packet_cbk(void *adapter_context,
 		dest_mac_addr = (struct qdf_mac_addr *)(skb->data);
 		mac_addr = (struct qdf_mac_addr *)(skb->data+QDF_MAC_ADDR_SIZE);
 
-		vdev = hdd_objmgr_get_vdev(adapter);
-		if (vdev) {
-			ucfg_tdls_update_rx_pkt_cnt(vdev, mac_addr,
-						    dest_mac_addr);
-			hdd_objmgr_put_vdev(vdev);
+		if (!hdd_is_current_high_throughput(hdd_ctx)) {
+			vdev = hdd_objmgr_get_vdev(adapter);
+			if (vdev) {
+				ucfg_tdls_update_rx_pkt_cnt(vdev, mac_addr,
+							    dest_mac_addr);
+				hdd_objmgr_put_vdev(vdev);
+			}
 		}
 
 		skb->dev = adapter->dev;
 		skb->protocol = eth_type_trans(skb, skb->dev);
 		++adapter->hdd_stats.tx_rx_stats.rx_packets[cpu_index];
 		++adapter->stats.rx_packets;
-		/* count aggregated RX frame into stats */
-		adapter->stats.rx_packets += qdf_nbuf_get_gso_segs(skb);
 		adapter->stats.rx_bytes += skb->len;
 
 		/* Incr GW Rx count for NUD tracking based on GW mac addr */
@@ -2596,6 +2589,11 @@ QDF_STATUS hdd_rx_packet_cbk(void *adapter_context,
 				hdd_tx_rx_collect_connectivity_stats_info(
 					skb, adapter,
 					PKT_TYPE_RX_REFUSED, &pkt_type);
+			DPTRACE(qdf_dp_log_proto_pkt_info(NULL, NULL, 0, 0,
+						      QDF_RX,
+						      QDF_TRACE_DEFAULT_MSDU_ID,
+						      QDF_TX_RX_STATUS_DROP));
+
 		}
 	}
 
@@ -3305,9 +3303,6 @@ void hdd_reset_tcp_delack(struct hdd_context *hdd_ctx)
 {
 	enum wlan_tp_level next_level = WLAN_SVC_TP_LOW;
 	struct wlan_rx_tp_data rx_tp_data = {0};
-
-	if (!hdd_ctx->en_tcp_delack_no_lro)
-		return;
 
 	rx_tp_data.rx_tp_flags |= TCP_DEL_ACK_IND;
 	rx_tp_data.level = next_level;

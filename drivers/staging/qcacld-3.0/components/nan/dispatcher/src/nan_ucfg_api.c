@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -461,14 +461,14 @@ QDF_STATUS ucfg_nan_req_processor(struct wlan_objmgr_vdev *vdev,
 			nan_err("Request allocation failure");
 			return QDF_STATUS_E_NOMEM;
 		}
-		psoc_obj->ndp_request_ctx = osif_request_cookie(request);
+		psoc_obj->request_context = osif_request_cookie(request);
 
 		nan_debug("Wait for NDP END indication");
 		err = osif_request_wait_for_response(request);
 		if (err)
 			nan_debug("NAN request timed out: %d", err);
 		osif_request_put(request);
-		psoc_obj->ndp_request_ctx = NULL;
+		psoc_obj->request_context = NULL;
 	}
 
 	return QDF_STATUS_SUCCESS;
@@ -760,7 +760,7 @@ QDF_STATUS ucfg_nan_discovery_req(void *in_req, uint32_t req_type)
 		return QDF_STATUS_E_NOMEM;
 	}
 
-	psoc_priv->nan_disc_request_ctx = osif_request_cookie(request);
+	psoc_priv->request_context = osif_request_cookie(request);
 	if (req_type == NAN_DISABLE_REQ)
 		psoc_priv->is_explicit_disable = true;
 
@@ -1125,19 +1125,6 @@ ucfg_nan_is_sta_nan_ndi_4_port_allowed(struct wlan_objmgr_psoc *psoc)
 	}
 
 	return psoc_nan_obj->nan_caps.sta_nan_ndi_ndi_allowed;
-}
-
-bool ucfg_nan_is_beamforming_supported(struct wlan_objmgr_psoc *psoc)
-{
-	struct nan_psoc_priv_obj *psoc_nan_obj;
-
-	psoc_nan_obj = nan_get_psoc_priv_obj(psoc);
-	if (!psoc_nan_obj) {
-		nan_err("psoc_nan_obj is null");
-		return false;
-	}
-
-	return psoc_nan_obj->nan_caps.ndi_txbf_supported;
 }
 
 static inline bool

@@ -169,14 +169,6 @@ bool reg_is_us_alpha2(uint8_t *alpha2)
 	return false;
 }
 
-bool reg_is_etsi_alpha2(uint8_t *alpha2)
-{
-	if ((alpha2[0] == 'G') && (alpha2[1] == 'B'))
-		return true;
-
-	return false;
-}
-
 QDF_STATUS reg_set_country(struct wlan_objmgr_pdev *pdev,
 			   uint8_t *country)
 {
@@ -219,7 +211,7 @@ QDF_STATUS reg_set_country(struct wlan_objmgr_pdev *pdev,
 		if (psoc_reg->cc_src == SOURCE_USERSPACE ||
 		    psoc_reg->cc_src == SOURCE_CORE) {
 			reg_debug("country is not different");
-			return QDF_STATUS_E_INVAL;
+			return QDF_STATUS_SUCCESS;
 		}
 	}
 
@@ -266,11 +258,10 @@ QDF_STATUS reg_set_country(struct wlan_objmgr_pdev *pdev,
 			}
 			if (reg_is_world_ctry_code(
 				    pdev_priv_obj->def_region_domain))
-				rd.cc.regdmn.reg_2g_5g_pair_id =
+				rd.cc.regdmn_id =
 					pdev_priv_obj->def_region_domain;
 			else
-				rd.cc.regdmn.reg_2g_5g_pair_id =
-							DEFAULT_WORLD_REGDMN;
+				rd.cc.regdmn_id = DEFAULT_WORLD_REGDMN;
 			rd.flags = REGDMN_IS_SET;
 		} else {
 			qdf_mem_copy(rd.cc.alpha, cc.country,
@@ -527,6 +518,7 @@ QDF_STATUS reg_get_band(struct wlan_objmgr_pdev *pdev,
 #ifdef DISABLE_CHANNEL_LIST
 QDF_STATUS reg_restore_cached_channels(struct wlan_objmgr_pdev *pdev)
 {
+	struct wlan_regulatory_psoc_priv_obj *psoc_priv_obj;
 	struct wlan_regulatory_pdev_priv_obj *pdev_priv_obj;
 	struct wlan_objmgr_psoc *psoc;
 	QDF_STATUS status;
@@ -540,34 +532,16 @@ QDF_STATUS reg_restore_cached_channels(struct wlan_objmgr_pdev *pdev)
 	psoc = wlan_pdev_get_psoc(pdev);
 	if (!psoc) {
 		reg_err("psoc is NULL");
+		return QDF_STATUS_E_INVAL;
+	}
+
+	psoc_priv_obj = reg_get_psoc_obj(psoc);
+	if (!IS_VALID_PSOC_REG_OBJ(psoc_priv_obj)) {
+		reg_err("psoc reg component is NULL");
 		return QDF_STATUS_E_INVAL;
 	}
 
 	pdev_priv_obj->disable_cached_channels = false;
-	reg_compute_pdev_current_chan_list(pdev_priv_obj);
-	status = reg_send_scheduler_msg_sb(psoc, pdev);
-	return status;
-}
-
-QDF_STATUS reg_disable_cached_channels(struct wlan_objmgr_pdev *pdev)
-{
-	struct wlan_regulatory_pdev_priv_obj *pdev_priv_obj;
-	struct wlan_objmgr_psoc *psoc;
-	QDF_STATUS status;
-
-	pdev_priv_obj = reg_get_pdev_obj(pdev);
-	if (!IS_VALID_PDEV_REG_OBJ(pdev_priv_obj)) {
-		reg_err("pdev reg component is NULL");
-		return QDF_STATUS_E_INVAL;
-	}
-
-	psoc = wlan_pdev_get_psoc(pdev);
-	if (!psoc) {
-		reg_err("psoc is NULL");
-		return QDF_STATUS_E_INVAL;
-	}
-
-	pdev_priv_obj->disable_cached_channels = true;
 	reg_compute_pdev_current_chan_list(pdev_priv_obj);
 	status = reg_send_scheduler_msg_sb(psoc, pdev);
 	return status;
@@ -686,6 +660,11 @@ QDF_STATUS reg_cache_channel_state(struct wlan_objmgr_pdev *pdev,
 	return QDF_STATUS_SUCCESS;
 }
 #endif /* CONFIG_CHAN_NUM_API */
+void set_disable_channel_state(
+	struct wlan_regulatory_pdev_priv_obj *pdev_priv_obj)
+{
+	pdev_priv_obj->disable_cached_channels = pdev_priv_obj->sap_state;
+}
 #endif
 
 #ifdef CONFIG_REG_CLIENT
@@ -749,65 +728,6 @@ bool reg_get_fcc_constraint(struct wlan_objmgr_pdev *pdev, uint32_t freq)
 
 	return true;
 }
-
-#ifdef CONFIG_BAND_6GHZ
-/**
- * reg_is_afc_available() - check if the automated frequency control system is
- * available, function will need to be updated once AFC is implemented
- * @pdev: Pointer to pdev structure
- *
- * Return: false since the AFC system is not yet available
- */
-static bool reg_is_afc_available(struct wlan_objmgr_pdev *pdev)
-{
-	return false;
-}
-
-enum reg_6g_ap_type reg_decide_6g_ap_pwr_type(struct wlan_objmgr_pdev *pdev)
-{
-	struct wlan_regulatory_pdev_priv_obj *pdev_priv_obj;
-	enum reg_6g_ap_type ap_pwr_type = REG_INDOOR_AP;
-
-	pdev_priv_obj = reg_get_pdev_obj(pdev);
-	if (!IS_VALID_PDEV_REG_OBJ(pdev_priv_obj)) {
-		reg_err("pdev reg component is NULL");
-		return REG_VERY_LOW_POWER_AP;
-	}
-
-	if (reg_is_afc_available(pdev))
-		ap_pwr_type = REG_STANDARD_POWER_AP;
-	else if (pdev_priv_obj->reg_6g_superid != FCC1_6G &&
-		 pdev_priv_obj->reg_6g_superid != FCC1_6G_CL)
-		ap_pwr_type = REG_VERY_LOW_POWER_AP;
-
-	reg_set_ap_pwr_and_update_chan_list(pdev, ap_pwr_type);
-
-	return ap_pwr_type;
-}
-
-QDF_STATUS reg_set_ap_pwr_and_update_chan_list(struct wlan_objmgr_pdev *pdev,
-					       enum reg_6g_ap_type ap_pwr_type)
-{
-	struct wlan_regulatory_pdev_priv_obj *pdev_priv_obj;
-	QDF_STATUS status;
-
-	pdev_priv_obj = reg_get_pdev_obj(pdev);
-	if (!IS_VALID_PDEV_REG_OBJ(pdev_priv_obj)) {
-		reg_err("pdev reg component is NULL");
-		return QDF_STATUS_E_INVAL;
-	}
-
-	status = reg_set_cur_6g_ap_pwr_type(pdev, ap_pwr_type);
-	if (QDF_IS_STATUS_ERROR(status)) {
-		reg_debug("failed to set AP power type to %d", ap_pwr_type);
-		return status;
-	}
-
-	reg_compute_pdev_current_chan_list(pdev_priv_obj);
-
-	return QDF_STATUS_SUCCESS;
-}
-#endif /* CONFIG_BAND_6GHZ */
 
 #endif /* CONFIG_REG_CLIENT */
 

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -223,51 +223,6 @@ enum scan_mode_6ghz {
 
 /*
  * <ini>
- * active_max_channel_time_6g_conc - Set max time for active 6G
- * channel scan when associated to AP.
- * @Min: 0
- * @Max: 10000
- * @Default: 40
- *
- * This ini is used to set maximum time in msecs spent in
- * active 6G channel scan
- *
- * Related: None
- *
- * Usage: External
- *
- * </ini>
- */
-#define CFG_ACTIVE_MAX_6G_CHANNEL_TIME_CONC CFG_INI_UINT(\
-		"active_max_channel_time_6g_conc",\
-		0, 10000, 40,\
-		CFG_VALUE_OR_DEFAULT, "active conc dwell time for 6G channels")
-
-/*
- * <ini>
- * passive_max_channel_time_6g_conc - Set max time for passive 6G
- * channel scan when associated to AP.
- * @Min: 0
- * @Max: 10000
- * @Default: 40
- *
- * This ini is used to set maximum time in msecs spent in
- * passive 6G chan scan
- *
- * Related: None
- *
- * Usage: External
- *
- * </ini>
- */
-#define CFG_PASSIVE_MAX_6G_CHANNEL_TIME_CONC CFG_INI_UINT(\
-		"passive_max_channel_time_6g_conc",\
-		0, 10000, 40,\
-		CFG_VALUE_OR_DEFAULT,\
-		"passive conc dwell time for 6G channels")
-
-/*
- * <ini>
  * gPassiveMaxChannelTime - Set max channel time for passive scan
  * @Min: 0
  * @Max: 10000
@@ -420,30 +375,6 @@ enum scan_mode_6ghz {
 			"honour NL80211 scan policy flags")
 
 #ifdef FEATURE_WLAN_SCAN_PNO
-/*
- * <ini>
- * g_user_config_sched_scan_plan - set user config sched scan plans.
- * @Min: 0
- * @Max:1
- * @Default: 1
- *
- * This ini is used to decide if user config number of sched scan plan needs to
- * be configured or only one sched scan plan needs to be configured.
- * If this ini is enabled then  user config number of sched scan plans will be
- * configured else only one sched scan plan will be configured.
- *
- * Supported Feature: PNO scan
- *
- * Usage: External
- *
- * </ini>
- */
-
-#define CFG_USER_CONFIG_SCHED_SCAN_PLAN CFG_INI_BOOL(\
-			"g_user_config_sched_scan_plan",\
-			true, \
-			"set user config sched scan plans")
-
 /*
  * <ini>
  * g_max_sched_scan_plan_iterations - pno sched max scan plan iterations.
@@ -874,8 +805,7 @@ enum scan_mode_6ghz {
 	CFG(CFG_MAWC_NLO_ENABLED) \
 	CFG(CFG_MAWC_NLO_EXP_BACKOFF_RATIO) \
 	CFG(CFG_MAWC_NLO_INIT_SCAN_INTERVAL) \
-	CFG(CFG_MAWC_NLO_MAX_SCAN_INTERVAL) \
-	CFG(CFG_USER_CONFIG_SCHED_SCAN_PLAN)
+	CFG(CFG_MAWC_NLO_MAX_SCAN_INTERVAL)
 
 #else
 #define CFG_SCAN_PNO
@@ -1391,8 +1321,6 @@ enum scan_mode_6ghz {
 	CFG(CFG_PASSIVE_MAX_CHANNEL_TIME) \
 	CFG(CFG_ACTIVE_MAX_6G_CHANNEL_TIME) \
 	CFG(CFG_PASSIVE_MAX_6G_CHANNEL_TIME) \
-	CFG(CFG_ACTIVE_MAX_6G_CHANNEL_TIME_CONC) \
-	CFG(CFG_PASSIVE_MAX_6G_CHANNEL_TIME_CONC) \
 	CFG(CFG_SCAN_NUM_PROBES) \
 	CFG(CFG_SCAN_PROBE_REPEAT_TIME) \
 	CFG(CFG_ADAPTIVE_SCAN_DWELL_MODE) \

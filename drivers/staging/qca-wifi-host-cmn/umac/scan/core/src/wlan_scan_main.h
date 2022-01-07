@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -253,7 +253,6 @@ struct scan_vdev_obj {
  * @pno_wake_lock: pno wake lock
  * @pno_cb: callback to call on PNO completion
  * @mawc_params: Configuration parameters for NLO MAWC.
- * @user_config_sched_scan_plan: if enabled set user confing sched scan plan
  */
 struct pno_def_config {
 	bool pno_offload_enabled;
@@ -272,7 +271,6 @@ struct pno_def_config {
 	qdf_wake_lock_t pno_wake_lock;
 	struct cb_handler pno_cb;
 	struct nlo_mawc_params mawc_params;
-	bool user_config_sched_scan_plan;
 };
 #endif
 
@@ -304,8 +302,6 @@ struct extscan_def_config {
  * @active_dwell_2g: default active dwell time for 2G channels, if it's not zero
  * @active_dwell_6g: default active dwell time for 6G channels
  * @passive_dwell_6g: default passive dwell time for 6G channels
- * @active_dwell_time_6g_conc: default concurrent active dwell time for 6G
- * @passive_dwell_time_6g_conc: default concurrent passive dwell time for 6G
  * @passive_dwell:default passive dwell time
  * @max_rest_time: default max rest time
  * @sta_miracast_mcc_rest_time: max rest time for miracast and mcc
@@ -393,8 +389,6 @@ struct scan_default_params {
 	uint32_t active_dwell_2g;
 	uint32_t active_dwell_6g;
 	uint32_t passive_dwell_6g;
-	uint32_t active_dwell_time_6g_conc;
-	uint32_t passive_dwell_time_6g_conc;
 	uint32_t passive_dwell;
 	uint32_t max_rest_time;
 	uint32_t sta_miracast_mcc_rest_time;

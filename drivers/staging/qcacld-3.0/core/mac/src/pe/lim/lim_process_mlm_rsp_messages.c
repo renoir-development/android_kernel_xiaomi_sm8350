@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -42,7 +42,6 @@
 #include "wlan_reg_services_api.h"
 #include "wma.h"
 #include "wlan_pkt_capture_ucfg_api.h"
-#include "wlan_lmac_if_def.h"
 
 #define MAX_SUPPORTED_PEERS_WEP 16
 
@@ -444,15 +443,8 @@ void lim_pmf_comeback_timer_callback(void *context)
 		return;
 	}
 
-	if (session->limMlmState != eLIM_MLM_WT_ASSOC_RSP_STATE) {
-		pe_debug("Don't send assoc req, timer expire when limMlmState %d vdev id %d",
-			 session->limMlmState, session->vdev_id);
-		return;
-	}
-
-	pe_info("comeback later timer expired. sending MLM ASSOC req for vdev %d, session limMlmState %d, info lim_mlm_state %d",
-		session->vdev_id, session->limMlmState, info->lim_mlm_state);
-
+	pe_info("comeback later timer expired. sending MLM ASSOC req for vdev %d",
+		session->vdev_id);
 	/* set MLM state such that ASSOC REQ packet will be sent out */
 	session->limPrevMlmState = info->lim_prev_mlm_state;
 	session->limMlmState = info->lim_mlm_state;
@@ -2286,11 +2278,9 @@ void lim_handle_add_bss_rsp(struct mac_context *mac_ctx,
 	tLimMlmStartCnf mlm_start_cnf;
 	struct pe_session *session_entry;
 	enum bss_type bss_type;
-	struct wlan_lmac_if_reg_tx_ops *tx_ops;
-	struct vdev_mlme_obj *mlme_obj;
 
 	if (!add_bss_rsp) {
-		pe_err("add_bss_rsp is NULL");
+		pe_err("add_bss_rspis NULL");
 		return;
 	}
 
@@ -2310,24 +2300,7 @@ void lim_handle_add_bss_rsp(struct mac_context *mac_ctx,
 		       add_bss_rsp->vdev_id);
 		goto err;
 	}
-	if (LIM_IS_AP_ROLE(session_entry)) {
-		if (wlan_reg_is_ext_tpc_supported(mac_ctx->psoc)) {
-			mlme_obj =
-			wlan_vdev_mlme_get_cmpt_obj(session_entry->vdev);
-			if (!mlme_obj) {
-				pe_err("vdev component object is NULL");
-				goto err;
-			}
-			tx_ops = wlan_reg_get_tx_ops(mac_ctx->psoc);
 
-			lim_calculate_tpc(mac_ctx, session_entry, false);
-
-			if (tx_ops->set_tpc_power)
-				tx_ops->set_tpc_power(mac_ctx->psoc,
-						      session_entry->vdev_id,
-						      &mlme_obj->reg_tpc_obj);
-		}
-	}
 	bss_type = session_entry->bssType;
 	/* update PE session Id */
 	mlm_start_cnf.sessionId = session_entry->peSessionId;
@@ -2690,9 +2663,6 @@ static void lim_process_switch_channel_join_req(
 	tLimMlmJoinCnf join_cnf;
 	uint8_t nontx_bss_id = 0;
 	struct bss_description *bss;
-	struct vdev_mlme_obj *mlme_obj;
-	struct wlan_lmac_if_reg_tx_ops *tx_ops;
-	bool tpe_change = false;
 
 	if (status != QDF_STATUS_SUCCESS) {
 		pe_err("Change channel failed!!");
@@ -2793,25 +2763,6 @@ static void lim_process_switch_channel_join_req(
 		goto error;
 	}
 
-	if (wlan_reg_is_ext_tpc_supported(mac_ctx->psoc)) {
-		tx_ops = wlan_reg_get_tx_ops(mac_ctx->psoc);
-
-		lim_process_tpe_ie_from_beacon(mac_ctx, session_entry, bss,
-					       &tpe_change);
-
-		mlme_obj = wlan_vdev_mlme_get_cmpt_obj(session_entry->vdev);
-		if (!mlme_obj) {
-			pe_err("vdev component object is NULL");
-			goto error;
-		}
-
-		lim_calculate_tpc(mac_ctx, session_entry, false);
-
-		if (tx_ops->set_tpc_power)
-			tx_ops->set_tpc_power(mac_ctx->psoc,
-					      session_entry->vdev_id,
-					      &mlme_obj->reg_tpc_obj);
-	}
 	/* include additional IE if there is */
 	lim_send_probe_req_mgmt_frame(mac_ctx, &ssId,
 		session_entry->pLimMlmJoinReq->bssDescription.bssId,

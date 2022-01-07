@@ -566,7 +566,6 @@ struct cdp_cmn_ops {
 					  ol_txrx_rx_fp rx,
 					  ol_osif_peer_handle osif_peer);
 #endif /* QCA_SUPPORT_WDS_EXTENDED */
-	void (*txrx_drain)(ol_txrx_soc_handle soc);
 };
 
 struct cdp_ctrl_ops {
@@ -1150,7 +1149,6 @@ struct ol_if_ops {
 	QDF_STATUS(*nss_stats_clr)(struct cdp_ctrl_objmgr_psoc *psoc,
 				   uint8_t vdev_id);
 	int (*dp_rx_get_pending)(ol_txrx_soc_handle soc);
-	void (*dp_rx_sched_refill_thread)(ol_txrx_soc_handle soc);
 	/* TODO: Add any other control path calls required to OL_IF/WMA layer */
 #ifdef QCA_SUPPORT_WDS_EXTENDED
 	void (*rx_wds_ext_peer_learn)(struct cdp_ctrl_objmgr_psoc *ctrl_psoc,
@@ -1278,7 +1276,6 @@ struct cdp_misc_ops {
 					     struct cdp_txrx_ext_stats *req);
 	QDF_STATUS (*request_rx_hw_stats)(struct cdp_soc_t *soc_hdl,
 					  uint8_t vdev_id);
-	void (*reset_rx_hw_ext_stats)(struct cdp_soc_t *soc_hdl);
 	QDF_STATUS (*vdev_inform_ll_conn)(struct cdp_soc_t *soc_hdl,
 					  uint8_t vdev_id,
 					  enum vdev_ll_conn_actions action);
@@ -1369,8 +1366,6 @@ struct cdp_peer_ops {
 					 uint8_t *peer_mac, bool val);
 	void (*set_peer_as_tdls_peer)(struct cdp_soc_t *soc, uint8_t vdev_id,
 				      uint8_t *peer_mac, bool val);
-	void (*peer_flush_frags)(struct cdp_soc_t *soc_hdl,
-				 uint8_t vdev_id, uint8_t *peer_mac);
 };
 
 /**

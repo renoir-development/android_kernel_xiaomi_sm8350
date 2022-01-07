@@ -176,7 +176,7 @@ lim_send_probe_req_mgmt_frame(struct mac_context *mac_ctx,
 			      uint16_t *additional_ielen,
 			      uint8_t *additional_ie)
 {
-	tDot11fProbeRequest *pr;
+	tDot11fProbeRequest pr;
 	uint32_t status, bytes, payload;
 	uint8_t *frame;
 	void *packet;
@@ -226,16 +226,13 @@ lim_send_probe_req_mgmt_frame(struct mac_context *mac_ctx,
 	if (pesession)
 		vdev_id = pesession->vdev_id;
 
-	pr = qdf_mem_malloc(sizeof(*pr));
-	if (!pr)
-		return QDF_STATUS_E_NOMEM;
-
 	/* The scheme here is to fill out a 'tDot11fProbeRequest' structure */
 	/* and then hand it off to 'dot11f_pack_probe_request' (for */
-	/* serialization). */
+	/* serialization).  We start by zero-initializing the structure: */
+	qdf_mem_zero((uint8_t *) &pr, sizeof(pr));
 
 	/* & delegating to assorted helpers: */
-	populate_dot11f_ssid(mac_ctx, ssid, &pr->SSID);
+	populate_dot11f_ssid(mac_ctx, ssid, &pr.SSID);
 
 	if (addn_ielen && additional_ie)
 		p2pie = limGetP2pIEPtr(mac_ctx, additional_ie, addn_ielen);
@@ -250,15 +247,15 @@ lim_send_probe_req_mgmt_frame(struct mac_context *mac_ctx,
 		 * In the below API pass channel number > 14, do that it fills
 		 * only 11a rates in supported rates
 		 */
-		populate_dot11f_supp_rates(mac_ctx, 15, &pr->SuppRates,
+		populate_dot11f_supp_rates(mac_ctx, 15, &pr.SuppRates,
 					   pesession);
 	} else {
 		populate_dot11f_supp_rates(mac_ctx, channel,
-					   &pr->SuppRates, pesession);
+					   &pr.SuppRates, pesession);
 
 		if (MLME_DOT11_MODE_11B != dot11mode) {
 			populate_dot11f_ext_supp_rates1(mac_ctx, channel,
-							&pr->ExtSuppRates);
+							&pr.ExtSuppRates);
 		}
 	}
 
@@ -268,21 +265,20 @@ lim_send_probe_req_mgmt_frame(struct mac_context *mac_ctx,
 	 * RRM is enabled. It should be ok even if we add it into probe req when
 	 * RRM is not enabled.
 	 */
-	populate_dot11f_ds_params(mac_ctx, &pr->DSParams, channel);
+	populate_dot11f_ds_params(mac_ctx, &pr.DSParams, channel);
 	/* Call RRM module to get the tx power for management used. */
 	txPower = (uint8_t) rrm_get_mgmt_tx_power(mac_ctx, pesession);
-	populate_dot11f_wfatpc(mac_ctx, &pr->WFATPC, txPower, 0);
+	populate_dot11f_wfatpc(mac_ctx, &pr.WFATPC, txPower, 0);
 
 	if (pesession) {
 		/* Include HT Capability IE */
 		if (pesession->htCapability &&
 		    !(WLAN_REG_IS_6GHZ_CHAN_FREQ(chan_freq)))
-			populate_dot11f_ht_caps(mac_ctx, pesession,
-						&pr->HTCaps);
+			populate_dot11f_ht_caps(mac_ctx, pesession, &pr.HTCaps);
 	} else {                /* !pesession */
 		if (IS_DOT11_MODE_HT(dot11mode) &&
 		    !(WLAN_REG_IS_6GHZ_CHAN_FREQ(chan_freq)))
-			populate_dot11f_ht_caps(mac_ctx, NULL, &pr->HTCaps);
+			populate_dot11f_ht_caps(mac_ctx, NULL, &pr.HTCaps);
 	}
 
 	/*
@@ -292,11 +288,11 @@ lim_send_probe_req_mgmt_frame(struct mac_context *mac_ctx,
 	if (wlan_reg_is_24ghz_ch_freq(chan_freq)) {
 		if (mac_ctx->roam.configParam.channelBondingMode24GHz
 		    == PHY_SINGLE_CHANNEL_CENTERED) {
-			pr->HTCaps.supportedChannelWidthSet =
+			pr.HTCaps.supportedChannelWidthSet =
 				eHT_CHANNEL_WIDTH_20MHZ;
-			pr->HTCaps.shortGI40MHz = 0;
+			pr.HTCaps.shortGI40MHz = 0;
 		} else {
-			pr->HTCaps.supportedChannelWidthSet =
+			pr.HTCaps.supportedChannelWidthSet =
 				eHT_CHANNEL_WIDTH_40MHZ;
 		}
 	}
@@ -305,27 +301,27 @@ lim_send_probe_req_mgmt_frame(struct mac_context *mac_ctx,
 		if (pesession->vhtCapability &&
 		    !(WLAN_REG_IS_6GHZ_CHAN_FREQ(chan_freq))) {
 			populate_dot11f_vht_caps(mac_ctx, pesession,
-						 &pr->VHTCaps);
+						 &pr.VHTCaps);
 			is_vht_enabled = true;
 		}
 	} else {
 		if (IS_DOT11_MODE_VHT(dot11mode) &&
 		    !(WLAN_REG_IS_6GHZ_CHAN_FREQ(chan_freq))) {
 			populate_dot11f_vht_caps(mac_ctx, pesession,
-						 &pr->VHTCaps);
+						 &pr.VHTCaps);
 			is_vht_enabled = true;
 		}
 	}
 	if (pesession)
-		populate_dot11f_ext_cap(mac_ctx, is_vht_enabled, &pr->ExtCap,
-					pesession);
+		populate_dot11f_ext_cap(mac_ctx, is_vht_enabled, &pr.ExtCap,
+			pesession);
 
 	if (IS_DOT11_MODE_HE(dot11mode) && pesession)
 		lim_update_session_he_capable(mac_ctx, pesession);
 
-	populate_dot11f_he_caps(mac_ctx, pesession, &pr->he_cap);
+	populate_dot11f_he_caps(mac_ctx, pesession, &pr.he_cap);
 	populate_dot11f_he_6ghz_cap(mac_ctx, pesession,
-				    &pr->he_6ghz_band_cap);
+				    &pr.he_6ghz_band_cap);
 
 	if (addn_ielen && additional_ie) {
 		qdf_mem_zero((uint8_t *)&extracted_ext_cap,
@@ -359,11 +355,11 @@ lim_send_probe_req_mgmt_frame(struct mac_context *mac_ctx,
 	if (pesession) {
 		if (!qcn_ie)
 			populate_dot11f_qcn_ie(mac_ctx, pesession,
-					       &pr->qcn_ie,
+					       &pr.qcn_ie,
 					       QCN_IE_ATTR_ID_ALL);
 		else
 			populate_dot11f_qcn_ie(mac_ctx, pesession,
-					       &pr->qcn_ie,
+					       &pr.qcn_ie,
 					       QCN_IE_ATTR_ID_VHT_MCS11);
 	}
 
@@ -373,10 +369,10 @@ lim_send_probe_req_mgmt_frame(struct mac_context *mac_ctx,
 	 * dot11f get packed payload size.
 	 */
 	if (extracted_ext_cap_flag)
-		lim_merge_extcap_struct(&pr->ExtCap, &extracted_ext_cap, true);
+		lim_merge_extcap_struct(&pr.ExtCap, &extracted_ext_cap, true);
 
 	/* That's it-- now we pack it.  First, how much space are we going to */
-	status = dot11f_get_packed_probe_request_size(mac_ctx, pr, &payload);
+	status = dot11f_get_packed_probe_request_size(mac_ctx, &pr, &payload);
 	if (DOT11F_FAILED(status)) {
 		pe_err("Failed to calculate the packed size for a Probe Request (0x%08x)",
 			status);
@@ -394,7 +390,6 @@ lim_send_probe_req_mgmt_frame(struct mac_context *mac_ctx,
 				      (void **)&packet);
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 		pe_err("Failed to allocate %d bytes for a Probe Request", bytes);
-		qdf_mem_free(pr);
 		return QDF_STATUS_E_NOMEM;
 	}
 	/* Paranoia: */
@@ -405,7 +400,7 @@ lim_send_probe_req_mgmt_frame(struct mac_context *mac_ctx,
 		SIR_MAC_MGMT_PROBE_REQ, bssid, self_macaddr);
 
 	/* That done, pack the Probe Request: */
-	status = dot11f_pack_probe_request(mac_ctx, pr, frame +
+	status = dot11f_pack_probe_request(mac_ctx, &pr, frame +
 					    sizeof(tSirMacMgmtHdr),
 					    payload, &payload);
 	if (DOT11F_FAILED(status)) {
@@ -415,9 +410,6 @@ lim_send_probe_req_mgmt_frame(struct mac_context *mac_ctx,
 	} else if (DOT11F_WARNED(status)) {
 		pe_warn("There were warnings while packing a Probe Request (0x%08x)", status);
 	}
-
-	qdf_mem_free(pr);
-
 	/* Append any AddIE if present. */
 	if (addn_ielen) {
 		qdf_mem_copy(frame + sizeof(tSirMacMgmtHdr) + payload,
@@ -704,27 +696,17 @@ lim_send_probe_rsp_mgmt_frame(struct mac_context *mac_ctx,
 		populate_dot11f_vht_caps(mac_ctx, pe_session, &frm->VHTCaps);
 		populate_dot11f_vht_operation(mac_ctx, pe_session,
 			&frm->VHTOperation);
-		populate_dot11f_tx_power_env(mac_ctx,
-					     &frm->transmit_power_env[0],
-					     pe_session->ch_width,
-					     pe_session->curr_op_freq,
-					     &frm->num_transmit_power_env,
-					     false);
+		populate_dot11f_vht_tx_power_env(
+				mac_ctx,
+				&frm->vht_transmit_power_env,
+				pe_session->ch_width,
+				pe_session->curr_op_freq);
 		/*
 		 * we do not support multi users yet.
 		 * populate_dot11f_vht_ext_bss_load( mac_ctx,
 		 *         &frm.VHTExtBssLoad );
 		 */
 		is_vht_enabled = true;
-	}
-
-	if (wlan_reg_is_6ghz_chan_freq(pe_session->curr_op_freq)) {
-		populate_dot11f_tx_power_env(mac_ctx,
-					     &frm->transmit_power_env[0],
-					     pe_session->ch_width,
-					     pe_session->curr_op_freq,
-					     &frm->num_transmit_power_env,
-					     false);
 	}
 
 	if (lim_is_session_he_capable(pe_session)) {
@@ -1372,12 +1354,11 @@ null_buf:
 }
 
 void
-lim_send_assoc_rsp_mgmt_frame(struct mac_context *mac_ctx,
-			      uint16_t status_code, uint16_t aid,
-			      tSirMacAddr peer_addr,
-			      uint8_t subtype, tpDphHashNode sta,
-			      struct pe_session *pe_session,
-			      bool tx_complete)
+lim_send_assoc_rsp_mgmt_frame(
+	struct mac_context *mac_ctx,
+	uint16_t status_code, uint16_t aid, tSirMacAddr peer_addr,
+	uint8_t subtype, tpDphHashNode sta, struct pe_session *pe_session,
+	bool tx_complete)
 {
 	static tDot11fAssocResponse frm;
 	uint8_t *frame;
@@ -1391,7 +1372,7 @@ lim_send_assoc_rsp_mgmt_frame(struct mac_context *mac_ctx,
 	tUpdateBeaconParams beacon_params;
 	uint8_t tx_flag = 0;
 	uint32_t addn_ie_len = 0;
-	uint8_t *add_ie;
+	uint8_t add_ie[WNI_CFG_ASSOC_RSP_ADDNIE_DATA_LEN];
 	tpSirAssocReq assoc_req = NULL;
 	uint8_t sme_session = 0;
 	bool is_vht = false;
@@ -1604,10 +1585,6 @@ lim_send_assoc_rsp_mgmt_frame(struct mac_context *mac_ctx,
 
 	lim_obss_send_detection_cfg(mac_ctx, pe_session, false);
 
-	add_ie = qdf_mem_malloc(WNI_CFG_ASSOC_RSP_ADDNIE_DATA_LEN);
-	if (!add_ie)
-		return;
-
 	if (assoc_req) {
 		addn_ie_len = pe_session->add_ie_params.assocRespDataLen;
 
@@ -1653,7 +1630,7 @@ lim_send_assoc_rsp_mgmt_frame(struct mac_context *mac_ctx,
 	if (DOT11F_FAILED(status)) {
 		pe_err("get Association Response size failure (0x%08x)",
 			status);
-		goto error;
+		return;
 	} else if (DOT11F_WARNED(status)) {
 		pe_warn("get Association Response size warning (0x%08x)",
 			status);
@@ -1668,7 +1645,7 @@ lim_send_assoc_rsp_mgmt_frame(struct mac_context *mac_ctx,
 				      (void **)&packet);
 	if (!QDF_IS_STATUS_SUCCESS(qdf_status)) {
 		pe_err("cds_packet_alloc failed");
-		goto error;
+		return;
 	}
 	/* Paranoia: */
 	qdf_mem_zero(frame, bytes);
@@ -1690,7 +1667,7 @@ lim_send_assoc_rsp_mgmt_frame(struct mac_context *mac_ctx,
 		pe_err("Association Response pack failure(0x%08x)",
 			status);
 		cds_packet_free((void *)packet);
-		goto error;
+		return;
 	} else if (DOT11F_WARNED(status)) {
 		pe_warn("Association Response pack warning (0x%08x)",
 			status);
@@ -1750,8 +1727,7 @@ lim_send_assoc_rsp_mgmt_frame(struct mac_context *mac_ctx,
 	 * counter inside this function.
 	 */
 	lim_util_count_sta_add(mac_ctx, sta, pe_session);
-error:
-	qdf_mem_free(add_ie);
+
 }
 
 void
@@ -1911,9 +1887,9 @@ static QDF_STATUS lim_assoc_tx_complete_cnf(void *context,
 	uint16_t reason_code;
 	struct mac_context *mac_ctx = (struct mac_context *)context;
 
-	pe_nofl_rl_info("Assoc req TX: %s (%d)",
-			(tx_complete == WMI_MGMT_TX_COMP_TYPE_COMPLETE_OK) ?
-			"success" : "fail", tx_complete);
+	pe_nofl_info("Assoc req TX: %s (%d)",
+		     (tx_complete == WMI_MGMT_TX_COMP_TYPE_COMPLETE_OK) ?
+		      "success" : "fail", tx_complete);
 
 	if (tx_complete == WMI_MGMT_TX_COMP_TYPE_COMPLETE_OK) {
 		assoc_ack_status = ACKED;
@@ -2368,9 +2344,6 @@ lim_send_assoc_req_mgmt_frame(struct mac_context *mac_ctx,
 			lim_merge_extcap_struct(&frm->ExtCap, &bcn_ext_cap,
 							false);
 		}
-
-		populate_dot11f_btm_extended_caps(mac_ctx, pe_session,
-						  &frm->ExtCap);
 		/*
 		 * TWT extended capabilities should be populated after the
 		 * intersection of beacon caps and self caps is done because
@@ -2797,9 +2770,9 @@ static QDF_STATUS lim_auth_tx_complete_cnf(void *context,
 	uint16_t reason_code;
 	bool sae_auth_acked;
 
-	pe_nofl_rl_info("Auth TX: %s (%d)",
-			(tx_complete == WMI_MGMT_TX_COMP_TYPE_COMPLETE_OK) ?
-			"success" : "fail", tx_complete);
+	pe_nofl_info("Auth TX: %s (%d)",
+		     (tx_complete == WMI_MGMT_TX_COMP_TYPE_COMPLETE_OK) ?
+		     "success" : "fail", tx_complete);
 	if (tx_complete == WMI_MGMT_TX_COMP_TYPE_COMPLETE_OK) {
 		mac_ctx->auth_ack_status = LIM_ACK_RCD_SUCCESS;
 		auth_ack_status = ACKED;
@@ -3782,10 +3755,10 @@ lim_send_deauth_mgmt_frame(struct mac_context *mac,
 				&nPayload, discon_ie);
 	mlme_free_self_disconnect_ies(pe_session->vdev);
 
-	pe_nofl_rl_info("Deauth TX: vdev %d seq_num %d reason %u waitForAck %d to " QDF_MAC_ADDR_FMT " from " QDF_MAC_ADDR_FMT,
-			pe_session->vdev_id, mac->mgmtSeqNum, nReason,
-			waitForAck, QDF_MAC_ADDR_REF(pMacHdr->da),
-			QDF_MAC_ADDR_REF(pe_session->self_mac_addr));
+	pe_nofl_info("Deauth TX: vdev %d seq_num %d reason %u waitForAck %d to " QDF_MAC_ADDR_FMT " from " QDF_MAC_ADDR_FMT,
+		     pe_session->vdev_id, mac->mgmtSeqNum, nReason, waitForAck,
+		     QDF_MAC_ADDR_REF(pMacHdr->da),
+		     QDF_MAC_ADDR_REF(pe_session->self_mac_addr));
 
 	if (!wlan_reg_is_24ghz_ch_freq(pe_session->curr_op_freq) ||
 	    pe_session->opmode == QDF_P2P_CLIENT_MODE ||
@@ -5334,22 +5307,20 @@ QDF_STATUS lim_send_addba_response_frame(struct mac_context *mac_ctx,
 	tpDphHashNode sta_ds;
 	uint16_t aid;
 	bool he_cap = false;
-	struct wlan_mlme_qos *qos_aggr;
 
 	vdev_id = session->vdev_id;
 
 	cdp_addba_responsesetup(soc, peer_mac, vdev_id, tid,
 				&dialog_token, &status_code, &buff_size,
 				&batimeout);
-	qos_aggr = &mac_ctx->mlme_cfg->qos_mlme_params;
+
 	qdf_mem_zero((uint8_t *) &frm, sizeof(frm));
 	frm.Category.category = ACTION_CATEGORY_BACK;
 	frm.Action.action = ADDBA_RESPONSE;
 
 	frm.DialogToken.token = dialog_token;
 	frm.Status.status = status_code;
-
-	if (qos_aggr->reject_addba_req) {
+	if (mac_ctx->reject_addba_req) {
 		frm.Status.status = STATUS_REQUEST_DECLINED;
 		pe_err("refused addba req");
 	}

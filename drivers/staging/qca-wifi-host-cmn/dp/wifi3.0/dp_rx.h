@@ -51,9 +51,6 @@
 #define DP_PEER_METADATA_PEER_ID_SHIFT	0
 #define DP_PEER_METADATA_VDEV_ID_MASK	0x003f0000
 #define DP_PEER_METADATA_VDEV_ID_SHIFT	16
-#define DP_PEER_METADATA_OFFLOAD_MASK	0x01000000
-#define DP_PEER_METADATA_OFFLOAD_SHIFT	24
-
 
 #define DP_PEER_METADATA_PEER_ID_GET(_peer_metadata)		\
 	(((_peer_metadata) & DP_PEER_METADATA_PEER_ID_MASK)	\
@@ -62,10 +59,6 @@
 #define DP_PEER_METADATA_VDEV_ID_GET(_peer_metadata)		\
 	(((_peer_metadata) & DP_PEER_METADATA_VDEV_ID_MASK)	\
 			>> DP_PEER_METADATA_VDEV_ID_SHIFT)
-
-#define DP_PEER_METADATA_OFFLOAD_GET(_peer_metadata)		\
-	(((_peer_metadata) & DP_PEER_METADATA_OFFLOAD_MASK)	\
-			>> DP_PEER_METADATA_OFFLOAD_SHIFT)
 
 #define DP_RX_DESC_MAGIC 0xdec0de
 
@@ -90,16 +83,12 @@ enum dp_rx_desc_state {
  * @replenish_caller: name of the function that last
  *  replenished the rx desc
  * @replenish_ts: last replenish timestamp
- * @prev_nbuf: previous nbuf info
- * @prev_nbuf_data_addr: previous nbuf data address
  */
 struct dp_rx_desc_dbg_info {
 	char freelist_caller[QDF_MEM_FUNC_NAME_SIZE];
 	uint64_t freelist_ts;
 	char replenish_caller[QDF_MEM_FUNC_NAME_SIZE];
 	uint64_t replenish_ts;
-	qdf_nbuf_t prev_nbuf;
-	uint8_t *prev_nbuf_data_addr;
 };
 
 /**
@@ -122,7 +111,6 @@ struct dp_rx_desc_dbg_info {
  * @unmapped		  used to mark rx_desc an unmapped if the corresponding
  *			  nbuf is already unmapped
  * @in_err_state	: Nbuf sanity failed for this descriptor.
- * @nbuf_data_addr	: VA of nbuf data posted
  */
 struct dp_rx_desc {
 	qdf_nbuf_t nbuf;
@@ -132,7 +120,6 @@ struct dp_rx_desc {
 	uint8_t	 pool_id;
 #ifdef RX_DESC_DEBUG_CHECK
 	uint32_t magic;
-	uint8_t *nbuf_data_addr;
 	struct dp_rx_desc_dbg_info *dbg_info;
 #endif
 	uint8_t	in_use:1,
@@ -563,29 +550,11 @@ dp_rx_cookie_check_and_invalidate(hal_ring_desc_t ring_desc)
 	HAL_RX_REO_BUF_COOKIE_INVALID_SET(ring_desc);
 	return QDF_STATUS_SUCCESS;
 }
-
-/**
- * dp_rx_cookie_reset_invalid_bit() - Reset the invalid bit of the cookie
- *  field in ring descriptor
- * @ring_desc: ring descriptor
- *
- * Return: None
- */
-static inline void
-dp_rx_cookie_reset_invalid_bit(hal_ring_desc_t ring_desc)
-{
-	HAL_RX_REO_BUF_COOKIE_INVALID_RESET(ring_desc);
-}
 #else
 static inline QDF_STATUS
 dp_rx_cookie_check_and_invalidate(hal_ring_desc_t ring_desc)
 {
 	return QDF_STATUS_SUCCESS;
-}
-
-static inline void
-dp_rx_cookie_reset_invalid_bit(hal_ring_desc_t ring_desc)
-{
 }
 #endif
 
@@ -746,7 +715,21 @@ void dp_rx_desc_pool_free(struct dp_soc *soc,
 void dp_rx_deliver_raw(struct dp_vdev *vdev, qdf_nbuf_t nbuf_list,
 				struct dp_peer *peer);
 
-#ifdef RX_DESC_LOGGING
+#ifdef RX_DESC_DEBUG_CHECK
+/**
+ * dp_rx_desc_paddr_sanity_check() - paddr sanity for ring desc vs rx_desc
+ * @rx_desc: rx descriptor
+ * @ring_paddr: paddr obatined from the ring
+ *
+ * Returns: QDF_STATUS
+ */
+static inline
+bool dp_rx_desc_paddr_sanity_check(struct dp_rx_desc *rx_desc,
+				   uint64_t ring_paddr)
+{
+	return (ring_paddr == qdf_nbuf_get_frag_paddr(rx_desc->nbuf, 0));
+}
+
 /*
  * dp_rx_desc_alloc_dbg_info() - Alloc memory for rx descriptor debug
  *  structure
@@ -797,12 +780,16 @@ void dp_rx_desc_update_dbg_info(struct dp_rx_desc *rx_desc,
 		qdf_str_lcopy(info->freelist_caller, func_name,
 			      QDF_MEM_FUNC_NAME_SIZE);
 		info->freelist_ts = qdf_get_log_timestamp();
-		info->prev_nbuf = rx_desc->nbuf;
-		info->prev_nbuf_data_addr = rx_desc->nbuf_data_addr;
-		rx_desc->nbuf_data_addr = NULL;
 	}
 }
 #else
+
+static inline
+bool dp_rx_desc_paddr_sanity_check(struct dp_rx_desc *rx_desc,
+				   uint64_t ring_paddr)
+{
+	return true;
+}
 
 static inline
 void dp_rx_desc_alloc_dbg_info(struct dp_rx_desc *rx_desc)
@@ -819,7 +806,7 @@ void dp_rx_desc_update_dbg_info(struct dp_rx_desc *rx_desc,
 				const char *func_name, uint8_t flag)
 {
 }
-#endif /* RX_DESC_LOGGING */
+#endif /* RX_DESC_DEBUG_CHECK */
 
 /**
  * dp_rx_add_to_free_desc_list() - Adds to a local free descriptor list
@@ -838,8 +825,6 @@ void __dp_rx_add_to_free_desc_list(union dp_rx_desc_list_elem_t **head,
 {
 	qdf_assert(head && new);
 
-	dp_rx_desc_update_dbg_info(new, func_name, RX_DESC_IN_FREELIST);
-
 	new->nbuf = NULL;
 	new->in_use = 0;
 
@@ -848,6 +833,8 @@ void __dp_rx_add_to_free_desc_list(union dp_rx_desc_list_elem_t **head,
 	/* reset tail if head->next is NULL */
 	if (!*tail || !(*head)->next)
 		*tail = *head;
+
+	dp_rx_desc_update_dbg_info(new, func_name, RX_DESC_IN_FREELIST);
 }
 
 uint8_t dp_rx_process_invalid_peer(struct dp_soc *soc, qdf_nbuf_t nbuf,
@@ -1345,7 +1332,6 @@ void dp_rx_desc_prep(struct dp_rx_desc *rx_desc,
 	rx_desc->magic = DP_RX_DESC_MAGIC;
 	rx_desc->nbuf = (nbuf_frag_info_t->virt_addr).nbuf;
 	rx_desc->unmapped = 0;
-	rx_desc->nbuf_data_addr = (uint8_t *)qdf_nbuf_data(rx_desc->nbuf);
 }
 
 /**
@@ -1375,20 +1361,6 @@ void dp_rx_desc_frag_prep(struct dp_rx_desc *rx_desc,
 {
 }
 #endif /* DP_RX_MON_MEM_FRAG */
-
-/**
- * dp_rx_desc_paddr_sanity_check() - paddr sanity for ring desc vs rx_desc
- * @rx_desc: rx descriptor
- * @ring_paddr: paddr obatined from the ring
- *
- * Returns: QDF_STATUS
- */
-static inline
-bool dp_rx_desc_paddr_sanity_check(struct dp_rx_desc *rx_desc,
-				   uint64_t ring_paddr)
-{
-	return (ring_paddr == qdf_nbuf_get_frag_paddr(rx_desc->nbuf, 0));
-}
 #else
 
 static inline bool dp_rx_desc_check_magic(struct dp_rx_desc *rx_desc)
@@ -1422,12 +1394,6 @@ void dp_rx_desc_frag_prep(struct dp_rx_desc *rx_desc,
 }
 #endif /* DP_RX_MON_MEM_FRAG */
 
-static inline
-bool dp_rx_desc_paddr_sanity_check(struct dp_rx_desc *rx_desc,
-				   uint64_t ring_paddr)
-{
-	return true;
-}
 #endif /* RX_DESC_DEBUG_CHECK */
 
 void dp_rx_enable_mon_dest_frag(struct rx_desc_pool *rx_desc_pool,
@@ -1588,35 +1554,4 @@ void dp_rx_link_desc_refill_duplicate_check(
 				struct dp_soc *soc,
 				struct hal_buf_info *buf_info,
 				hal_buff_addrinfo_t ring_buf_info);
-
-#ifdef WLAN_FEATURE_PKT_CAPTURE_V2
-/**
- * dp_rx_deliver_to_pkt_capture() - deliver rx packet to packet capture
- * @soc : dp_soc handle
- * @pdev: dp_pdev handle
- * @peer_id: peer_id of the peer for which completion came
- * @ppdu_id: ppdu_id
- * @netbuf: Buffer pointer
- *
- * This function is used to deliver rx packet to packet capture
- */
-void dp_rx_deliver_to_pkt_capture(struct dp_soc *soc,  struct dp_pdev *pdev,
-				  uint16_t peer_id, uint32_t is_offload,
-				  qdf_nbuf_t netbuf);
-void dp_rx_deliver_to_pkt_capture_no_peer(struct dp_soc *soc, qdf_nbuf_t nbuf,
-					  uint32_t is_offload);
-#else
-static inline void
-dp_rx_deliver_to_pkt_capture(struct dp_soc *soc,  struct dp_pdev *pdev,
-			     uint16_t peer_id, uint32_t is_offload,
-			     qdf_nbuf_t netbuf)
-{
-}
-
-static inline void
-dp_rx_deliver_to_pkt_capture_no_peer(struct dp_soc *soc, qdf_nbuf_t nbuf,
-				     uint32_t is_offload)
-{
-}
-#endif
 #endif /* _DP_RX_H */

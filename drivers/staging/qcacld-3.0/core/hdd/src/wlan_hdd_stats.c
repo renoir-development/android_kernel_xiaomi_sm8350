@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -199,33 +199,6 @@ static bool wlan_hdd_is_he_mcs_12_13_supported(uint16_t he_mcs_12_13_map)
 #endif
 
 static bool get_station_fw_request_needed = true;
-
-#ifdef WLAN_FEATURE_BIG_DATA_STATS
-/*
- * copy_station_big_data_stats_to_adapter() - Copy big data stats to adapter
- * @adapter: Pointer to the adapter
- * @stats: Pointer to the big data stats event
- *
- * Return: 0 if success, non-zero for failure
- */
-static void copy_station_big_data_stats_to_adapter(
-					struct hdd_adapter *adapter,
-					struct big_data_stats_event *stats)
-{
-	adapter->big_data_stats.vdev_id = stats->vdev_id;
-	adapter->big_data_stats.tsf_out_of_sync = stats->tsf_out_of_sync;
-	adapter->big_data_stats.ani_level = stats->ani_level;
-	adapter->big_data_stats.last_data_tx_pwr =
-					stats->last_data_tx_pwr;
-	adapter->big_data_stats.target_power_dsss =
-					stats->target_power_dsss;
-	adapter->big_data_stats.target_power_ofdm =
-					stats->target_power_ofdm;
-	adapter->big_data_stats.last_tx_data_rix = stats->last_tx_data_rix;
-	adapter->big_data_stats.last_tx_data_rate_kbps =
-					stats->last_tx_data_rate_kbps;
-}
-#endif
 
 #ifdef FEATURE_CLUB_LL_STATS_AND_GET_STATION
 static void
@@ -1774,20 +1747,17 @@ static void cache_station_stats_cb(struct stats_event *ev, void *cookie)
 	struct hdd_adapter *adapter = cookie, *next_adapter = NULL;
 	struct hdd_context *hdd_ctx = adapter->hdd_ctx;
 	uint8_t vdev_id = adapter->vdev_id;
-	wlan_net_dev_ref_dbgid dbgid = NET_DEV_HOLD_DISPLAY_TXRX_STATS;
 
-	hdd_for_each_adapter_dev_held_safe(hdd_ctx, adapter, next_adapter,
-					   dbgid) {
+	hdd_for_each_adapter_dev_held_safe(hdd_ctx, adapter, next_adapter) {
 		if (adapter->vdev_id != vdev_id) {
-			hdd_adapter_dev_put_debug(adapter, dbgid);
+			dev_put(adapter->dev);
 			continue;
 		}
 		copy_station_stats_to_adapter(adapter, ev);
 		/* dev_put has to be done here */
-		hdd_adapter_dev_put_debug(adapter, dbgid);
+		dev_put(adapter->dev);
 		if (next_adapter)
-			hdd_adapter_dev_put_debug(next_adapter,
-						  dbgid);
+			dev_put(next_adapter->dev);
 		break;
 	}
 }
@@ -6508,32 +6478,6 @@ out:
 	return ret;
 }
 
-#ifdef WLAN_FEATURE_BIG_DATA_STATS
-int wlan_hdd_get_big_data_station_stats(struct hdd_adapter *adapter)
-{
-	int ret = 0;
-	struct big_data_stats_event *big_data_stats;
-	struct wlan_objmgr_vdev *vdev;
-
-	vdev = hdd_objmgr_get_vdev(adapter);
-	if (!vdev)
-		return -EINVAL;
-
-	big_data_stats = wlan_cfg80211_mc_cp_get_big_data_stats(vdev,
-								&ret);
-	if (ret || !big_data_stats)
-		goto out;
-
-	copy_station_big_data_stats_to_adapter(adapter, big_data_stats);
-out:
-	if (big_data_stats)
-		wlan_cfg80211_mc_cp_stats_free_big_data_stats_event(
-								big_data_stats);
-	hdd_objmgr_put_vdev(vdev);
-	return ret;
-}
-#endif
-
 struct temperature_priv {
 	int temperature;
 };
@@ -6628,10 +6572,8 @@ void wlan_hdd_display_txrx_stats(struct hdd_context *ctx)
 	int i = 0;
 	uint32_t total_rx_pkt, total_rx_dropped,
 		 total_rx_delv, total_rx_refused;
-	wlan_net_dev_ref_dbgid dbgid = NET_DEV_HOLD_CACHE_STATION_STATS_CB;
 
-	hdd_for_each_adapter_dev_held_safe(ctx, adapter, next_adapter,
-					   dbgid) {
+	hdd_for_each_adapter_dev_held_safe(ctx, adapter, next_adapter) {
 		total_rx_pkt = 0;
 		total_rx_dropped = 0;
 		total_rx_delv = 0;
@@ -6639,7 +6581,7 @@ void wlan_hdd_display_txrx_stats(struct hdd_context *ctx)
 		stats = &adapter->hdd_stats.tx_rx_stats;
 
 		if (adapter->vdev_id == INVAL_VDEV_ID) {
-			hdd_adapter_dev_put_debug(adapter, dbgid);
+			dev_put(adapter->dev);
 			continue;
 		}
 
@@ -6652,7 +6594,7 @@ void wlan_hdd_display_txrx_stats(struct hdd_context *ctx)
 		}
 
 		/* dev_put has to be done here */
-		hdd_adapter_dev_put_debug(adapter, dbgid);
+		dev_put(adapter->dev);
 
 		hdd_debug("TX - called %u, dropped %u orphan %u",
 			  stats->tx_called, stats->tx_dropped,

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2011-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -147,12 +147,12 @@ lim_process_disassoc_frame(struct mac_context *mac, uint8_t *pRxPacketInfo,
 	/* Get reasonCode from Disassociation frame body */
 	reasonCode = sir_read_u16(pBody);
 
-	pe_nofl_rl_info("Disassoc RX: vdev %d from "QDF_MAC_ADDR_FMT" for "QDF_MAC_ADDR_FMT" RSSI = %d reason %d mlm state = %d, sme state = %d systemrole = %d ",
-			pe_session->vdev_id, QDF_MAC_ADDR_REF(pHdr->sa),
-			QDF_MAC_ADDR_REF(pHdr->da), frame_rssi,
-			reasonCode, pe_session->limMlmState,
-			pe_session->limSmeState,
-			GET_LIM_SYSTEM_ROLE(pe_session));
+	pe_nofl_info("Disassoc RX: vdev %d from "QDF_MAC_ADDR_FMT" for "QDF_MAC_ADDR_FMT" RSSI = %d reason %d mlm state = %d, sme state = %d systemrole = %d ",
+		     pe_session->vdev_id, QDF_MAC_ADDR_REF(pHdr->sa),
+		     QDF_MAC_ADDR_REF(pHdr->da), frame_rssi,
+		     reasonCode, pe_session->limMlmState,
+		     pe_session->limSmeState,
+		     GET_LIM_SYSTEM_ROLE(pe_session));
 	lim_diag_event_report(mac, WLAN_PE_DIAG_DISASSOC_FRAME_EVENT,
 		pe_session, 0, reasonCode);
 
@@ -385,9 +385,6 @@ void lim_perform_disassoc(struct mac_context *mac_ctx, int32_t frame_rssi,
 
 	/* Update PE session Id  */
 	mlmDisassocInd.sessionId = pe_session->peSessionId;
-	if (LIM_IS_STA_ROLE(pe_session) &&
-	    (pe_session->limMlmState == eLIM_MLM_WT_ASSOC_RSP_STATE))
-		lim_stop_pmfcomeback_timer(pe_session);
 
 	if (lim_is_reassoc_in_progress(mac_ctx, pe_session)) {
 

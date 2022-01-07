@@ -180,24 +180,6 @@ static QDF_STATUS update_mac_from_string(struct hdd_context *hdd_ctx,
 	return status;
 }
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0))
-static inline
-int hdd_firmware_request_nowarn(const struct firmware **fw,
-				const char *name,
-				struct device *device)
-{
-	return firmware_request_nowarn(fw, name, device);
-}
-#else
-static inline
-int hdd_firmware_request_nowarn(const struct firmware **fw,
-				const char *name,
-				struct device *device)
-{
-	return request_firmware(fw, name, device);
-}
-#endif
-
 /**
  * hdd_set_power_save_offload_config() - set power save offload configuration
  * @hdd_ctx: the pointer to hdd context
@@ -259,14 +241,8 @@ QDF_STATUS hdd_update_mac_config(struct hdd_context *hdd_ctx)
 
 	QDF_STATUS qdf_status = QDF_STATUS_SUCCESS;
 
-	if (!hdd_ctx->config->read_mac_addr_from_mac_file) {
-		hdd_debug("Reading MAC address from MAC file is not enabled.");
-		return QDF_STATUS_E_FAILURE;
-	}
-
 	memset(mac_table, 0, sizeof(mac_table));
-	status = hdd_firmware_request_nowarn(&fw, WLAN_MAC_FILE,
-					     hdd_ctx->parent_dev);
+	status = request_firmware(&fw, WLAN_MAC_FILE, hdd_ctx->parent_dev);
 	if (status) {
 		/*
 		 * request_firmware "fails" if the file is not found, which is a
@@ -563,29 +539,12 @@ static void hdd_set_fine_time_meas_cap(struct hdd_context *hdd_ctx)
  */
 static void hdd_set_oem_6g_supported(struct hdd_context *hdd_ctx)
 {
-	bool oem_6g_disable = true;
-	bool is_reg_6g_support, set_wifi_pos_6g_disabled;
+	bool oem_6g_disable = 1;
 
 	ucfg_mlme_get_oem_6g_supported(hdd_ctx->psoc, &oem_6g_disable);
-	is_reg_6g_support = wlan_reg_is_6ghz_supported(hdd_ctx->psoc);
-	set_wifi_pos_6g_disabled = (oem_6g_disable || !is_reg_6g_support);
-
-	/**
-	 * Host uses following truth table to set wifi pos 6Ghz disable in
-	 * ucfg_wifi_pos_set_oem_6g_supported().
-	 * -----------------------------------------------------------------
-	 * oem_6g_disable INI value | reg domain 6G support | Disable 6Ghz |
-	 * -----------------------------------------------------------------
-	 *            1             |           1           |        1     |
-	 *            1             |           0           |        1     |
-	 *            0             |           1           |        0     |
-	 *            0             |           0           |        1     |
-	 * -----------------------------------------------------------------
-	 */
-	ucfg_wifi_pos_set_oem_6g_supported(hdd_ctx->psoc,
-					   set_wifi_pos_6g_disabled);
+	ucfg_wifi_pos_set_oem_6g_supported(hdd_ctx->psoc, oem_6g_disable);
 	hdd_debug("oem 6g support is - %s",
-		  set_wifi_pos_6g_disabled ? "Disbaled" : "Enabled");
+		  oem_6g_disable ? "Enabled" : "Disbaled");
 }
 
 /**

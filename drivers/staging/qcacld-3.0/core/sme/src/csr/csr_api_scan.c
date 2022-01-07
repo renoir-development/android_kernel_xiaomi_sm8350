@@ -2149,17 +2149,15 @@ static void csr_update_bss_with_fils_data(struct mac_context *mac_ctx,
  * Return: None
  */
 static void
-csr_fill_single_pmk_ap_cap_from_scan_entry(struct mac_context *mac_ctx,
-					   struct bss_description *bss_desc,
+csr_fill_single_pmk_ap_cap_from_scan_entry(struct bss_description *bss_desc,
 					   struct scan_cache_entry *scan_entry)
 {
-	bss_desc->is_single_pmk = util_scan_entry_single_pmk(scan_entry) &&
-			  mac_ctx->mlme_cfg->lfr.sae_single_pmk_feature_enabled;
+	bss_desc->is_single_pmk = util_scan_entry_single_pmk(scan_entry);
 }
+
 #else
 static inline void
-csr_fill_single_pmk_ap_cap_from_scan_entry(struct mac_context *mac_ctx,
-					   struct bss_description *bss_desc,
+csr_fill_single_pmk_ap_cap_from_scan_entry(struct bss_description *bss_desc,
 					   struct scan_cache_entry *scan_entry)
 {
 }
@@ -2221,7 +2219,7 @@ static QDF_STATUS csr_fill_bss_from_scan_entry(struct mac_context *mac_ctx,
 	qdf_mem_copy(bss_desc->bssId,
 			scan_entry->bssid.bytes,
 			QDF_MAC_ADDR_SIZE);
-	bss_desc->scansystimensec = scan_entry->boottime_ns;
+	bss_desc->scansystimensec = scan_entry->scan_entry_time;
 	qdf_mem_copy(bss_desc->timeStamp,
 		scan_entry->tsf_info.data, 8);
 
@@ -2258,8 +2256,7 @@ static QDF_STATUS csr_fill_bss_from_scan_entry(struct mac_context *mac_ctx,
 	bss_desc->mbo_oce_enabled_ap =
 			util_scan_entry_mbo_oce(scan_entry) ? true : false;
 
-	csr_fill_single_pmk_ap_cap_from_scan_entry(mac_ctx, bss_desc,
-						   scan_entry);
+	csr_fill_single_pmk_ap_cap_from_scan_entry(bss_desc, scan_entry);
 
 	qdf_mem_copy(&bss_desc->mbssid_info, &scan_entry->mbssid_info,
 		     sizeof(struct scan_mbssid_info));
@@ -2669,6 +2666,8 @@ void csr_init_occupied_channels_list(struct mac_context *mac_ctx,
 			&mac_ctx->scan.occupiedChannels[sessionId],
 			true);
 	list = ucfg_scan_get_result(pdev, filter);
+	if (list)
+		sme_debug("num_entries %d", qdf_list_size(list));
 	if (!list || (list && !qdf_list_size(list))) {
 		goto err;
 	}
@@ -2768,16 +2767,4 @@ QDF_STATUS csr_scan_filter_results(struct mac_context *mac_ctx)
 
 	wlan_objmgr_pdev_release_ref(pdev, WLAN_LEGACY_MAC_ID);
 	return QDF_STATUS_SUCCESS;
-}
-
-void csr_update_beacon(struct mac_context *mac)
-{
-	struct scheduler_msg msg = { 0 };
-	QDF_STATUS status;
-
-	msg.type = SIR_LIM_UPDATE_BEACON;
-	status = scheduler_post_message(QDF_MODULE_ID_SME, QDF_MODULE_ID_PE,
-					QDF_MODULE_ID_PE, &msg);
-	if (status != QDF_STATUS_SUCCESS)
-		sme_err("scheduler_post_message failed, status = %u", status);
 }

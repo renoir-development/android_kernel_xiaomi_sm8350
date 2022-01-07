@@ -1300,14 +1300,12 @@ QDF_STATUS lim_populate_vht_mcs_set(struct mac_context *mac_ctx,
 		}
 	}
 
-	if (peer_vht_caps->txSupDataRate)
-		rates->vhtTxHighestDataRate =
-			QDF_MIN(rates->vhtTxHighestDataRate,
-				peer_vht_caps->txSupDataRate);
-	if (peer_vht_caps->rxHighSupDataRate)
-		rates->vhtRxHighestDataRate =
-			QDF_MIN(rates->vhtRxHighestDataRate,
-				peer_vht_caps->rxHighSupDataRate);
+	rates->vhtTxHighestDataRate =
+		QDF_MIN(rates->vhtTxHighestDataRate,
+			peer_vht_caps->txSupDataRate);
+	rates->vhtRxHighestDataRate =
+		QDF_MIN(rates->vhtRxHighestDataRate,
+			peer_vht_caps->rxHighSupDataRate);
 
 	if (session_entry && session_entry->nss == NSS_2x2_MODE)
 		mcs_map_mask2x2 = MCSMAPMASK2x2;
@@ -1752,11 +1750,7 @@ QDF_STATUS lim_populate_peer_rate_set(struct mac_context *mac,
 	if (IS_DOT11_MODE_HE(pe_session->dot11mode) && he_caps) {
 		lim_calculate_he_nss(pRates, pe_session);
 	} else if (pe_session->vhtCapability) {
-		/*
-		 * pRates->vhtTxMCSMap is intersection of self tx and peer rx
-		 * mcs so update nss as per peer rx mcs
-		 */
-		if ((pRates->vhtTxMCSMap & MCSMAPMASK2x2) == MCSMAPMASK2x2)
+		if ((pRates->vhtRxMCSMap & MCSMAPMASK2x2) == MCSMAPMASK2x2)
 			pe_session->nss = NSS_1x1_MODE;
 	} else if (pRates->supportedMCSSet[1] == 0) {
 		pe_session->nss = NSS_1x1_MODE;
@@ -2082,14 +2076,6 @@ static void lim_update_he_mcs_12_13(tpAddStaParams add_sta_params,
 		add_sta_params->he_mcs_12_13_map = sta_ds->he_mcs_12_13_map;
 }
 
-static void lim_add_tdls_sta_he_config(tpAddStaParams add_sta_params,
-				       tpDphHashNode sta_ds)
-{
-	pe_debug("Adding tdls he capabilities");
-	qdf_mem_copy(&add_sta_params->he_config, &sta_ds->he_config,
-		     sizeof(add_sta_params->he_config));
-}
-
 #else
 static void lim_update_he_stbc_capable(tpAddStaParams add_sta_params)
 {}
@@ -2097,11 +2083,6 @@ static void lim_update_he_stbc_capable(tpAddStaParams add_sta_params)
 static void lim_update_he_mcs_12_13(tpAddStaParams add_sta_params,
 				    tpDphHashNode sta_ds)
 {}
-
-static void lim_add_tdls_sta_he_config(tpAddStaParams add_sta_params,
-				       tpDphHashNode sta_ds)
-{
-}
 #endif
 
 /**
@@ -2380,7 +2361,6 @@ lim_add_sta(struct mac_context *mac_ctx,
 		pe_debug("Sta type is TDLS_PEER, ht_caps: 0x%x, vht_caps: 0x%x",
 			  add_sta_params->ht_caps,
 			  add_sta_params->vht_caps);
-		lim_add_tdls_sta_he_config(add_sta_params, sta_ds);
 	}
 #endif
 

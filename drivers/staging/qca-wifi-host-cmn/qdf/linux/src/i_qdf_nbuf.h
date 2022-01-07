@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2014-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -1479,11 +1479,8 @@ static inline void __qdf_nbuf_set_pktlen(struct sk_buff *skb, uint32_t len)
 			if (unlikely(pskb_expand_head(skb, 0,
 				len - skb->len - skb_tailroom(skb),
 				GFP_ATOMIC))) {
-				QDF_DEBUG_PANIC(
-				   "SKB tailroom is lessthan requested length."
-				   " tail-room: %u, len: %u, skb->len: %u",
-				   skb_tailroom(skb), len, skb->len);
 				dev_kfree_skb_any(skb);
+				qdf_assert(0);
 			}
 		}
 		skb_put(skb, (len - skb->len));
@@ -2486,17 +2483,6 @@ static inline uint32_t __qdf_nbuf_get_mark(__qdf_nbuf_t buf)
 static inline qdf_size_t __qdf_nbuf_get_data_len(__qdf_nbuf_t nbuf)
 {
 	return (skb_end_pointer(nbuf) - nbuf->data);
-}
-
-/**
- * __qdf_nbuf_get_gso_segs() - Return the number of gso segments
- * @skb: Pointer to network buffer
- *
- * Return: Return the number of gso segments
- */
-static inline uint16_t __qdf_nbuf_get_gso_segs(struct sk_buff *skb)
-{
-	return skb_shinfo(skb)->gso_segs;
 }
 
 #ifdef CONFIG_NBUF_AP_PLATFORM

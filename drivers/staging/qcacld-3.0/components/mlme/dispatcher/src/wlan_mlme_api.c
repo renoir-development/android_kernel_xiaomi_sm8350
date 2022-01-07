@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -474,7 +474,7 @@ wlan_mlme_update_cfg_with_tgt_caps(struct wlan_objmgr_psoc *psoc,
 			tgt_caps->stop_all_host_scan_support;
 	mlme_obj->cfg.gen.dual_sta_roam_fw_support =
 			tgt_caps->dual_sta_roam_fw_support;
-	mlme_obj->cfg.gen.ocv_support = tgt_caps->ocv_support;
+
 }
 
 #ifdef WLAN_FEATURE_11AX
@@ -573,11 +573,13 @@ QDF_STATUS mlme_update_tgt_he_caps_in_cfg(struct wlan_objmgr_psoc *psoc,
 	mlme_obj->cfg.he_caps.dot11_he_cap.present = 1;
 	mlme_obj->cfg.he_caps.dot11_he_cap.htc_he = he_cap->htc_he;
 
-	value = QDF_MIN(he_cap->twt_request,
-			mlme_obj->cfg.he_caps.dot11_he_cap.twt_request);
-	mlme_obj->cfg.he_caps.dot11_he_cap.twt_request = value;
+	mlme_obj->cfg.he_caps.dot11_he_cap.twt_request =
+				he_cap->twt_request;
+	mlme_obj->cfg.he_caps.dot11_he_cap.twt_responder =
+				he_cap->twt_responder;
 
-	value = QDF_MIN(he_cap->fragmentation,
+	value = QDF_MIN(
+			he_cap->fragmentation,
 			mlme_obj->cfg.he_caps.he_dynamic_fragmentation);
 
 	if (cfg_in_range(CFG_HE_FRAGMENTATION, value))
@@ -607,14 +609,8 @@ QDF_STATUS mlme_update_tgt_he_caps_in_cfg(struct wlan_objmgr_psoc *psoc,
 	mlme_obj->cfg.he_caps.dot11_he_cap.trigd_rsp_sched =
 					he_cap->trigd_rsp_sched;
 	mlme_obj->cfg.he_caps.dot11_he_cap.a_bsr = he_cap->a_bsr;
-
-	value = QDF_MIN(he_cap->broadcast_twt,
-			mlme_obj->cfg.he_caps.dot11_he_cap.broadcast_twt);
-	mlme_obj->cfg.he_caps.dot11_he_cap.broadcast_twt = value;
-
-	mlme_obj->cfg.he_caps.dot11_he_cap.flex_twt_sched =
-			he_cap->flex_twt_sched;
-
+	mlme_obj->cfg.he_caps.dot11_he_cap.broadcast_twt =
+					he_cap->broadcast_twt;
 	mlme_obj->cfg.he_caps.dot11_he_cap.ba_32bit_bitmap =
 					he_cap->ba_32bit_bitmap;
 	mlme_obj->cfg.he_caps.dot11_he_cap.mu_cascade = he_cap->mu_cascade;
@@ -626,6 +622,8 @@ QDF_STATUS mlme_update_tgt_he_caps_in_cfg(struct wlan_objmgr_psoc *psoc,
 		mlme_obj->cfg.he_caps.dot11_he_cap.max_ampdu_len_exp_ext =
 					he_cap->max_ampdu_len_exp_ext;
 	mlme_obj->cfg.he_caps.dot11_he_cap.amsdu_frag = he_cap->amsdu_frag;
+	mlme_obj->cfg.he_caps.dot11_he_cap.flex_twt_sched =
+					he_cap->flex_twt_sched;
 	mlme_obj->cfg.he_caps.dot11_he_cap.rx_ctrl_frame =
 					he_cap->rx_ctrl_frame;
 	mlme_obj->cfg.he_caps.dot11_he_cap.bsrp_ampdu_aggr =
@@ -1743,20 +1741,6 @@ QDF_STATUS wlan_mlme_set_assoc_sta_limit(struct wlan_objmgr_psoc *psoc,
 	return QDF_STATUS_SUCCESS;
 }
 
-QDF_STATUS wlan_mlme_get_assoc_sta_limit(struct wlan_objmgr_psoc *psoc,
-					 int *value)
-{
-	struct wlan_mlme_psoc_ext_obj *mlme_obj;
-
-	mlme_obj = mlme_get_psoc_ext_obj(psoc);
-	if (!mlme_obj)
-		return QDF_STATUS_E_FAILURE;
-
-	*value = mlme_obj->cfg.sap_cfg.assoc_sta_limit;
-
-	return QDF_STATUS_SUCCESS;
-}
-
 QDF_STATUS wlan_mlme_get_sap_get_peer_info(struct wlan_objmgr_psoc *psoc,
 					   bool *value)
 {
@@ -2095,19 +2079,6 @@ QDF_STATUS wlan_mlme_get_bigtk_support(struct wlan_objmgr_psoc *psoc,
 		return QDF_STATUS_E_FAILURE;
 
 	*value = mlme_obj->cfg.gen.bigtk_support;
-
-	return QDF_STATUS_SUCCESS;
-}
-
-QDF_STATUS wlan_mlme_get_ocv_support(struct wlan_objmgr_psoc *psoc,
-				     bool *value)
-{
-	struct wlan_mlme_psoc_ext_obj *mlme_obj = mlme_get_psoc_ext_obj(psoc);
-
-	if (!mlme_obj)
-		return QDF_STATUS_E_FAILURE;
-
-	*value = mlme_obj->cfg.gen.ocv_support;
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -2708,34 +2679,6 @@ wlan_mlme_set_11d_enabled(struct wlan_objmgr_psoc *psoc, bool value)
 		return QDF_STATUS_E_FAILURE;
 
 	mlme_obj->cfg.gen.enabled_11d = value;
-
-	return QDF_STATUS_SUCCESS;
-}
-
-QDF_STATUS
-wlan_mlme_is_rf_test_mode_enabled(struct wlan_objmgr_psoc *psoc, bool *value)
-{
-	struct wlan_mlme_psoc_ext_obj *mlme_obj;
-
-	mlme_obj = mlme_get_psoc_ext_obj(psoc);
-	if (!mlme_obj)
-		return QDF_STATUS_E_FAILURE;
-
-	*value = mlme_obj->cfg.gen.enabled_rf_test_mode;
-
-	return QDF_STATUS_SUCCESS;
-}
-
-QDF_STATUS
-wlan_mlme_set_rf_test_mode_enabled(struct wlan_objmgr_psoc *psoc, bool value)
-{
-	struct wlan_mlme_psoc_ext_obj *mlme_obj;
-
-	mlme_obj = mlme_get_psoc_ext_obj(psoc);
-	if (!mlme_obj)
-		return QDF_STATUS_E_FAILURE;
-
-	mlme_obj->cfg.gen.enabled_rf_test_mode = value;
 
 	return QDF_STATUS_SUCCESS;
 }
@@ -3730,8 +3673,6 @@ char *mlme_get_roam_trigger_str(uint32_t roam_scan_trigger)
 		return "WTC BTM";
 	case WMI_ROAM_TRIGGER_REASON_NONE:
 		return "NONE";
-	case WMI_ROAM_TRIGGER_REASON_PMK_TIMEOUT:
-		return "PMK Expired";
 	default:
 		return "UNKNOWN";
 	}
@@ -3744,9 +3685,9 @@ void mlme_get_converted_timestamp(uint32_t timestamp, char *time)
 	secs = timestamp / 1000;
 	mins = secs / 60;
 	hr = mins / 60;
-	qdf_snprint(time, TIME_STRING_LEN, "[%02d:%02d:%02d.%06u]",
-		    (hr % 24), (mins % 60), (secs % 60),
-		    (timestamp % 1000) * 1000);
+	qdf_snprintf(time, TIME_STRING_LEN, "[%02d:%02d:%02d.%06u]",
+		     (hr % 24), (mins % 60), (secs % 60),
+		     (timestamp % 1000) * 1000);
 }
 
 #if defined(WLAN_SAE_SINGLE_PMK) && defined(WLAN_FEATURE_ROAM_OFFLOAD)
@@ -3811,7 +3752,7 @@ void wlan_mlme_get_sae_single_pmk_info(struct wlan_objmgr_vdev *vdev,
 				       struct wlan_mlme_sae_single_pmk *pmksa)
 {
 	struct mlme_legacy_priv *mlme_priv;
-	struct mlme_pmk_info *pmk_info;
+	struct mlme_pmk_info pmk_info;
 
 	mlme_priv = wlan_vdev_mlme_get_ext_hdl(vdev);
 	if (!mlme_priv) {
@@ -3819,17 +3760,15 @@ void wlan_mlme_get_sae_single_pmk_info(struct wlan_objmgr_vdev *vdev,
 		return;
 	}
 
-	pmk_info = &mlme_priv->mlme_roam.sae_single_pmk.pmk_info;
+	pmk_info = mlme_priv->mlme_roam.sae_single_pmk.pmk_info;
 
 	pmksa->sae_single_pmk_ap =
 		mlme_priv->mlme_roam.sae_single_pmk.sae_single_pmk_ap;
-	pmksa->pmk_info.spmk_timeout_period = pmk_info->spmk_timeout_period;
-	pmksa->pmk_info.spmk_timestamp = pmk_info->spmk_timestamp;
 
-	if (pmk_info->pmk_len) {
-		qdf_mem_copy(pmksa->pmk_info.pmk, pmk_info->pmk,
-			     pmk_info->pmk_len);
-		pmksa->pmk_info.pmk_len = pmk_info->pmk_len;
+	if (pmk_info.pmk_len) {
+		qdf_mem_copy(pmksa->pmk_info.pmk, pmk_info.pmk,
+			     pmk_info.pmk_len);
+		pmksa->pmk_info.pmk_len = pmk_info.pmk_len;
 		return;
 	}
 
@@ -4741,26 +4680,4 @@ bool wlan_mlme_is_sta_mon_conc_supported(struct wlan_objmgr_psoc *psoc)
 		return true;
 
 	return false;
-}
-
-bool wlan_mlme_is_local_tpe_pref(struct wlan_objmgr_psoc *psoc)
-{
-	struct wlan_mlme_psoc_ext_obj *mlme_obj;
-
-	mlme_obj = mlme_get_psoc_ext_obj(psoc);
-	if (!mlme_obj)
-		return false;
-
-	return mlme_obj->cfg.power.use_local_tpe;
-}
-
-bool wlan_mlme_skip_tpe(struct wlan_objmgr_psoc *psoc)
-{
-	struct wlan_mlme_psoc_ext_obj *mlme_obj;
-
-	mlme_obj = mlme_get_psoc_ext_obj(psoc);
-	if (!mlme_obj)
-		return false;
-
-	return mlme_obj->cfg.power.skip_tpe;
 }

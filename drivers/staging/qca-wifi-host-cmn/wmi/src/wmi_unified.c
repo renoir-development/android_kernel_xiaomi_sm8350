@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2015-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -1646,7 +1646,7 @@ wmi_buf_alloc_debug(wmi_unified_t wmi_handle, uint32_t len,
 {
 	wmi_buf_t wmi_buf;
 
-	if (roundup(len + sizeof(WMI_CMD_HDR), 4) > wmi_handle->max_msg_len) {
+	if (roundup(len + WMI_MIN_HEAD_ROOM, 4) > wmi_handle->max_msg_len) {
 		QDF_ASSERT(0);
 		return NULL;
 	}
@@ -1687,7 +1687,7 @@ wmi_buf_t wmi_buf_alloc_fl(wmi_unified_t wmi_handle, uint32_t len,
 {
 	wmi_buf_t wmi_buf;
 
-	if (roundup(len + sizeof(WMI_CMD_HDR), 4) > wmi_handle->max_msg_len) {
+	if (roundup(len + WMI_MIN_HEAD_ROOM, 4) > wmi_handle->max_msg_len) {
 		QDF_DEBUG_PANIC("Invalid length %u (via %s:%u)",
 				len, func, line);
 		return NULL;
@@ -1911,54 +1911,14 @@ static inline void wmi_unified_debug_dump(wmi_unified_t wmi_handle)
 						"WMI_NON_TLV_TARGET"));
 }
 
-#ifdef SYSTEM_PM_CHECK
-/**
- * wmi_set_system_pm_pkt_tag() - API to set tag for system pm packets
- * @htc_tag: HTC tag
- * @buf: wmi cmd buffer
- * @cmd_id: cmd id
- *
- * Return: None
- */
-static void wmi_set_system_pm_pkt_tag(uint16_t *htc_tag, wmi_buf_t buf,
-				      uint32_t cmd_id)
-{
-	switch (cmd_id) {
-	case WMI_WOW_ENABLE_CMDID:
-	case WMI_PDEV_SUSPEND_CMDID:
-		*htc_tag = HTC_TX_PACKET_SYSTEM_SUSPEND;
-		break;
-	case WMI_WOW_HOSTWAKEUP_FROM_SLEEP_CMDID:
-	case WMI_PDEV_RESUME_CMDID:
-		*htc_tag = HTC_TX_PACKET_SYSTEM_RESUME;
-		break;
-	case WMI_D0_WOW_ENABLE_DISABLE_CMDID:
-		if (wmi_is_legacy_d0wow_disable_cmd(buf, cmd_id))
-			*htc_tag = HTC_TX_PACKET_SYSTEM_RESUME;
-		else
-			*htc_tag = HTC_TX_PACKET_SYSTEM_SUSPEND;
-		break;
-	default:
-		break;
-	}
-}
-#else
-static inline void wmi_set_system_pm_pkt_tag(uint16_t *htc_tag, wmi_buf_t buf,
-					     uint32_t cmd_id)
-{
-}
-#endif
-
 QDF_STATUS wmi_unified_cmd_send_fl(wmi_unified_t wmi_handle, wmi_buf_t buf,
 				   uint32_t len, uint32_t cmd_id,
 				   const char *func, uint32_t line)
 {
 	HTC_PACKET *pkt;
 	uint16_t htc_tag = 0;
-	bool rtpm_inprogress;
 
-	rtpm_inprogress = wmi_get_runtime_pm_inprogress(wmi_handle);
-	if (rtpm_inprogress) {
+	if (wmi_get_runtime_pm_inprogress(wmi_handle)) {
 		htc_tag = wmi_handle->ops->wmi_set_htc_tx_tag(wmi_handle, buf,
 							      cmd_id);
 	} else if (qdf_atomic_read(&wmi_handle->is_target_suspended) &&
@@ -2019,9 +1979,6 @@ QDF_STATUS wmi_unified_cmd_send_fl(wmi_unified_t wmi_handle, wmi_buf_t buf,
 		qdf_atomic_dec(&wmi_handle->pending_cmds);
 		return QDF_STATUS_E_NOMEM;
 	}
-
-	if (!rtpm_inprogress)
-		wmi_set_system_pm_pkt_tag(&htc_tag, buf, cmd_id);
 
 	SET_HTC_PACKET_INFO_TX(pkt,
 			       NULL,
@@ -2263,7 +2220,7 @@ wmi_process_rx_diag_event_worker_thread_ctx(struct wmi_unified *wmi_handle,
 		num_diag_events_pending = qdf_nbuf_queue_len(
 						&wmi_handle->diag_event_queue);
 
-		if (num_diag_events_pending >= RX_DIAG_WQ_MAX_SIZE) {
+		if (num_diag_events_pending == RX_DIAG_WQ_MAX_SIZE) {
 			qdf_spin_unlock_bh(&wmi_handle->diag_eventq_lock);
 			wmi_handle->wmi_rx_diag_events_dropped++;
 			wmi_debug_rl("Rx diag events dropped count: %d",
@@ -2275,8 +2232,7 @@ wmi_process_rx_diag_event_worker_thread_ctx(struct wmi_unified *wmi_handle,
 
 	qdf_nbuf_queue_add(&wmi_handle->diag_event_queue, evt_buf);
 	qdf_spin_unlock_bh(&wmi_handle->diag_eventq_lock);
-	qdf_queue_work(0, wmi_handle->wmi_rx_diag_work_queue,
-		       &wmi_handle->rx_diag_event_work);
+	qdf_sched_work(0, &wmi_handle->rx_diag_event_work);
 }
 
 void wmi_process_fw_event_worker_thread_ctx(struct wmi_unified *wmi_handle,
@@ -2601,13 +2557,25 @@ static int __wmi_process_qmi_fw_event(void *wmi_cb_ctx, void *buf, int len)
 	struct wmi_unified *wmi_handle = wmi_cb_ctx;
 	wmi_buf_t evt_buf;
 	uint32_t evt_id;
+	int wmi_msg_len;
 
-	if (!wmi_handle || !buf)
+	if (!wmi_handle || !buf || (len < WMI_MIN_HEAD_ROOM))
 		return -EINVAL;
 
-	evt_buf = wmi_buf_alloc(wmi_handle, len);
+	/**
+	 * Subtract WMI_MIN_HEAD_ROOM from received QMI event length to get
+	 * wmi message length
+	 */
+	wmi_msg_len = len - WMI_MIN_HEAD_ROOM;
+
+	evt_buf = wmi_buf_alloc(wmi_handle, wmi_msg_len);
 	if (!evt_buf)
 		return -ENOMEM;
+
+	/*
+	 * Set the length of the buffer to match the allocation size.
+	 */
+	qdf_nbuf_set_pktlen(evt_buf, len);
 
 	qdf_mem_copy(qdf_nbuf_data(evt_buf), buf, len);
 	evt_id = WMI_GET_FIELD(qdf_nbuf_data(evt_buf), WMI_CMD_HDR, COMMANDID);
@@ -2940,13 +2908,6 @@ static QDF_STATUS wmi_initialize_worker_context(struct wmi_unified *wmi_handle)
 	qdf_nbuf_queue_init(&wmi_handle->event_queue);
 	qdf_create_work(0, &wmi_handle->rx_event_work,
 			wmi_rx_event_work, wmi_handle);
-
-	wmi_handle->wmi_rx_diag_work_queue =
-		qdf_alloc_unbound_workqueue("wmi_rx_diag_event_work_queue");
-	if (!wmi_handle->wmi_rx_diag_work_queue) {
-		wmi_err("failed to create wmi_rx_diag_event_work_queue");
-		return QDF_STATUS_E_RESOURCES;
-	}
 	qdf_spinlock_create(&wmi_handle->diag_eventq_lock);
 	qdf_nbuf_queue_init(&wmi_handle->diag_event_queue);
 	qdf_create_work(0, &wmi_handle->rx_diag_event_work,
@@ -3274,7 +3235,7 @@ wmi_unified_remove_work(struct wmi_unified *wmi_handle)
 	qdf_spin_unlock_bh(&wmi_handle->eventq_lock);
 
 	/* Remove diag events work */
-	qdf_flush_workqueue(0, wmi_handle->wmi_rx_diag_work_queue);
+	qdf_flush_work(&wmi_handle->rx_diag_event_work);
 	qdf_spin_lock_bh(&wmi_handle->diag_eventq_lock);
 	buf = qdf_nbuf_queue_remove(&wmi_handle->diag_event_queue);
 	while (buf) {

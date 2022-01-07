@@ -91,14 +91,6 @@
 #define wma_nofl_debug(params...) \
 	QDF_TRACE_DEBUG_NO_FL(QDF_MODULE_ID_WMA, params)
 
-#define wma_conditional_log(is_console_log_enabled, params...) \
-	do { \
-		if (is_console_log_enabled) \
-			wma_info(params); \
-		else \
-			wma_debug(params); \
-	} while (0)
-
 #define WMA_WILDCARD_PDEV_ID 0x0
 
 #define WMA_HW_DEF_SCAN_MAX_DURATION      30000 /* 30 secs */
@@ -215,8 +207,6 @@
 #define WMA_DISASSOC_RECV_WAKE_LOCK_DURATION    WAKELOCK_DURATION_RECOMMENDED
 #define WMA_ROAM_HO_WAKE_LOCK_DURATION          (500)          /* in msec */
 #define WMA_ROAM_PREAUTH_WAKE_LOCK_DURATION     (2 * 1000)
-
-#define WMA_REASON_PROBE_REQ_WPS_IE_RECV_DURATION     (3 * 1000)
 
 #ifdef FEATURE_WLAN_AUTO_SHUTDOWN
 #define WMA_AUTO_SHUTDOWN_WAKE_LOCK_DURATION    WAKELOCK_DURATION_RECOMMENDED
@@ -827,6 +817,7 @@ struct wma_wlm_stats_data {
  * @last_umac_data_ota_timestamp: timestamp when OTA of last umac data
  *   was done
  * @last_umac_data_nbuf: cache nbuf ptr for the last umac data buf
+ * @needShutdown: is shutdown needed or not
  * @tgt_cfg_update_cb: configuration update callback
  * @reg_cap: regulatory capablities
  * @scan_id: scan id
@@ -948,6 +939,7 @@ typedef struct {
 	wma_tx_ota_comp_callback umac_data_ota_ack_cb;
 	unsigned long last_umac_data_ota_timestamp;
 	qdf_nbuf_t last_umac_data_nbuf;
+	bool needShutdown;
 	wma_tgt_cfg_cb tgt_cfg_update_cb;
 	HAL_REG_CAPABILITIES reg_cap;
 	uint32_t scan_id;
@@ -976,7 +968,6 @@ typedef struct {
 	qdf_wake_lock_t wow_auto_shutdown_wl;
 	qdf_wake_lock_t roam_ho_wl;
 	qdf_wake_lock_t roam_preauth_wl;
-	qdf_wake_lock_t probe_req_wps_wl;
 	int wow_nack;
 	qdf_atomic_t is_wow_bus_suspended;
 #ifdef WLAN_FEATURE_LPSS
@@ -1048,16 +1039,6 @@ typedef struct {
 	bool fw_therm_throt_support;
 	bool enable_tx_compl_tsf64;
 } t_wma_handle, *tp_wma_handle;
-
-/**
- * wma_validate_handle() - Validate WMA handle
- * @wma_handle: wma handle
- *
- * Return: errno if WMA handle is NULL; 0 otherwise
- */
-#define wma_validate_handle(wma_handle) \
-        __wma_validate_handle(wma_handle, __func__)
-int __wma_validate_handle(tp_wma_handle wma_handle, const char *func);
 
 /**
  * wma_vdev_nss_chain_params_send() - send vdev nss chain params to fw.
@@ -2066,6 +2047,19 @@ void wma_vdev_clear_pause_bit(uint8_t vdev_id, wmi_tx_pause_type bit_pos)
 	iface->pause_bitmap &= ~(1 << bit_pos);
 }
 
+#ifndef ROAM_OFFLOAD_V1
+/**
+ * wma_process_roaming_config() - process roam request
+ * @wma_handle: wma handle
+ * @roam_req: roam request parameters
+ *
+ * Main routine to handle ROAM commands coming from CSR module.
+ *
+ * Return: QDF status
+ */
+QDF_STATUS wma_process_roaming_config(tp_wma_handle wma_handle,
+				     struct roam_offload_scan_req *roam_req);
+#endif
 #ifdef WLAN_FEATURE_ROAM_OFFLOAD
 /**
  * wma_send_roam_preauth_status() - Send the preauth status to wmi
@@ -2414,14 +2408,10 @@ int wma_motion_det_base_line_host_event_handler(void *handle, u_int8_t *event,
  * @vdev_id: vdev id
  * @bssid: AP bssid
  * @roam_sync: if roam sync is in progress
- * @is_resp_required: Peer create response is expected from firmware.
- * This flag will be set to true for initial connection and false for
- * LFR2 case.
  *
  * Return: 0 on success, else error on failure
  */
-QDF_STATUS wma_add_bss_peer_sta(uint8_t vdev_id, uint8_t *bssid,
-				bool is_resp_required);
+QDF_STATUS wma_add_bss_peer_sta(uint8_t vdev_id, uint8_t *bssid);
 
 /**
  * wma_send_vdev_stop() - WMA api to send vdev stop to fw

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2021 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2020 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -420,34 +420,6 @@ static void hdd_softap_notify_dhcp_ind(void *context, struct sk_buff *netbuf)
 	hdd_post_dhcp_ind(adapter, dest_mac_addr, WMA_DHCP_STOP_IND);
 }
 
-void hdd_ipa_update_rx_mcbc_stats(struct hdd_adapter *adapter,
-				  struct sk_buff *skb)
-{
-	struct hdd_station_info *hdd_sta_info;
-	struct qdf_mac_addr *src_mac;
-	qdf_ether_header_t *eh;
-
-	src_mac = (struct qdf_mac_addr *)(skb->data +
-					  QDF_NBUF_SRC_MAC_OFFSET);
-
-	hdd_sta_info = hdd_get_sta_info_by_mac(
-				&adapter->sta_info_list,
-				src_mac->bytes,
-				STA_INFO_SOFTAP_IPA_RX_PKT_CALLBACK);
-	if (!hdd_sta_info)
-		return;
-
-	if (qdf_nbuf_data_is_ipv4_mcast_pkt(skb->data))
-		hdd_sta_info->rx_mc_bc_cnt++;
-
-	eh = (qdf_ether_header_t *)qdf_nbuf_data(skb);
-	if (QDF_IS_ADDR_BROADCAST(eh->ether_dhost))
-		hdd_sta_info->rx_mc_bc_cnt++;
-
-	hdd_put_sta_info_ref(&adapter->sta_info_list, &hdd_sta_info,
-			     true, STA_INFO_SOFTAP_IPA_RX_PKT_CALLBACK);
-}
-
 int hdd_softap_inspect_dhcp_packet(struct hdd_adapter *adapter,
 				   struct sk_buff *skb,
 				   enum qdf_proto_dir dir)
@@ -579,11 +551,6 @@ static void __hdd_softap_hard_start_xmit(struct sk_buff *skb,
 			  QDF_MODULE_ID_HDD_SAP_DATA,
 			  "%s: Recovery/(Un)load in Progress. Ignore!!!",
 			  __func__);
-		goto drop_pkt;
-	}
-
-	if (hdd_ctx->hdd_wlan_suspended) {
-		hdd_err_rl("Device is system suspended, drop pkt");
 		goto drop_pkt;
 	}
 
@@ -1150,8 +1117,6 @@ QDF_STATUS hdd_softap_rx_packet_cbk(void *adapter_context, qdf_nbuf_t rx_buf)
 		cpu_index = wlan_hdd_get_cpu();
 		++adapter->hdd_stats.tx_rx_stats.rx_packets[cpu_index];
 		++adapter->stats.rx_packets;
-		/* count aggregated RX frame into stats */
-		adapter->stats.rx_packets += qdf_nbuf_get_gso_segs(skb);
 		adapter->stats.rx_bytes += skb->len;
 
 		/* Send DHCP Indication to FW */
@@ -1170,15 +1135,6 @@ QDF_STATUS hdd_softap_rx_packet_cbk(void *adapter_context, qdf_nbuf_t rx_buf)
 			hdd_put_sta_info_ref(&adapter->sta_info_list, &sta_info,
 					     true,
 					     STA_INFO_SOFTAP_RX_PACKET_CBK);
-		}
-
-		if (qdf_unlikely(qdf_nbuf_is_ipv4_eapol_pkt(skb) &&
-				 qdf_mem_cmp(qdf_nbuf_data(skb) +
-					     QDF_NBUF_DEST_MAC_OFFSET,
-					     adapter->mac_addr.bytes,
-					     QDF_MAC_ADDR_SIZE))) {
-			qdf_nbuf_free(skb);
-			continue;
 		}
 
 		hdd_event_eapol_log(skb, QDF_RX);
@@ -1203,10 +1159,15 @@ QDF_STATUS hdd_softap_rx_packet_cbk(void *adapter_context, qdf_nbuf_t rx_buf)
 
 		qdf_status = hdd_rx_deliver_to_stack(adapter, skb);
 
-		if (QDF_IS_STATUS_SUCCESS(qdf_status))
+		if (QDF_IS_STATUS_SUCCESS(qdf_status)) {
 			++adapter->hdd_stats.tx_rx_stats.rx_delivered[cpu_index];
-		else
+		} else {
 			++adapter->hdd_stats.tx_rx_stats.rx_refused[cpu_index];
+			DPTRACE(qdf_dp_log_proto_pkt_info(NULL, NULL, 0, 0,
+						      QDF_RX,
+						      QDF_TRACE_DEFAULT_MSDU_ID,
+						      QDF_TX_RX_STATUS_DROP));
+		}
 	}
 
 	return QDF_STATUS_SUCCESS;
@@ -1450,7 +1411,7 @@ QDF_STATUS hdd_softap_stop_bss(struct hdd_adapter *adapter)
 
 	if (adapter->device_mode == QDF_SAP_MODE &&
 	    !hdd_ctx->config->disable_channel)
-		wlan_hdd_restore_channels(hdd_ctx);
+		wlan_hdd_restore_channels(hdd_ctx, true);
 
 	/*  Mark the indoor channel (passive) to enable  */
 	if (indoor_chnl_marking && adapter->device_mode == QDF_SAP_MODE) {
