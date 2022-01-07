@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #define pr_fmt(fmt)	"[drm:%s:%d] " fmt, __func__, __LINE__
@@ -234,7 +233,7 @@ static int sde_backlight_setup(struct sde_connector *c_conn,
 	props.type = BACKLIGHT_RAW;
 	props.power = FB_BLANK_UNBLANK;
 	props.max_brightness = bl_config->brightness_max_level;
-	props.brightness = bl_config->brightness_max_level;
+	props.brightness = bl_config->brightness_init_level;
 	snprintf(bl_node_name, BL_NODE_NAME_SIZE, "panel%u-backlight",
 							display_count);
 	c_conn->bl_device = backlight_device_register(bl_node_name, dev->dev,
@@ -906,6 +905,8 @@ int sde_connector_pre_kickoff(struct drm_connector *connector)
 
 	SDE_EVT32_VERBOSE(connector->base.id);
 
+	mi_sde_connector_gir_fence(connector);
+
 	mi_sde_connector_fod_hbm_fence(connector);
 
 	rc = c_conn->ops.pre_kickoff(connector, c_conn->display, &params);
@@ -1016,9 +1017,12 @@ void sde_connector_helper_bridge_enable(struct drm_connector *connector)
 	 */
 	if (display->panel->bl_config.bl_update ==
 				BL_UPDATE_DELAY_UNTIL_FIRST_FRAME) {
-		if (!c_conn->allow_bl_update)
+		if (!c_conn->allow_bl_update) {
 			sde_encoder_wait_for_event(c_conn->encoder,
 					MSM_ENC_TX_COMPLETE);
+			SDE_INFO("[%s]show first frame done, bl:%d\n",
+				display->panel->name, c_conn->unset_bl_level);
+		}
 	}
 	c_conn->allow_bl_update = true;
 
@@ -2484,6 +2488,7 @@ void _sde_connector_report_panel_dead(struct sde_connector *conn,
 		skip_pre_kickoff);
 
 	conn->panel_dead = true;
+
 	event.type = DRM_EVENT_PANEL_DEAD;
 	event.length = sizeof(bool);
 	msm_mode_object_event_notify(&conn->base.base,

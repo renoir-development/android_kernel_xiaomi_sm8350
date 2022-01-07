@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #ifndef _DSI_DISPLAY_H_
@@ -14,12 +13,14 @@
 #include <linux/firmware.h>
 #include <drm/drmP.h>
 #include <drm/drm_crtc.h>
+#include <drm/drm_mipi_dsi.h>
 
 #include "msm_drv.h"
 #include "dsi_defs.h"
 #include "dsi_ctrl.h"
 #include "dsi_phy.h"
 #include "dsi_panel.h"
+#include <video/mipi_display.h>
 
 #define MAX_DSI_CTRLS_PER_DISPLAY             2
 #define DSI_CLIENT_NAME_SIZE		20

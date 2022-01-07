@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #ifndef _DSI_DEFS_H_
@@ -264,7 +263,7 @@ enum dsi_dyn_clk_feature_type {
  * @DSI_CMD_SET_MAX
  */
 enum dsi_cmd_set_type {
-	DSI_CMD_SET_PRE_ON = 0,
+	DSI_CMD_SET_PRE_ON,
 	DSI_CMD_SET_ON,
 	DSI_CMD_SET_POST_ON,
 	DSI_CMD_SET_PRE_OFF,
@@ -348,6 +347,13 @@ enum dsi_cmd_set_type {
 	DSI_CMD_SET_MI_NOLP_DC_HBM,
 	DSI_CMD_SET_MI_COLOR_INVERT_ON,
 	DSI_CMD_SET_MI_COLOR_INVERT_OFF,
+	DSI_CMD_SET_MI_DEMURA_WHEN_DC_OFF,
+	DSI_CMD_SET_MI_DEMURA_WHEN_DC_ON,
+	DSI_CMD_SET_MI_FLAT_MODE_READ_PRE,
+	DSI_CMD_SET_MI_PRE_DOZE_TO_OFF,
+	DSI_CMD_SET_MI_TIMING_SWITCH_GIR,
+	DSI_CMD_SET_MI_AOD_TO_DC_ON,
+	DSI_CMD_SET_MI_CUP_DBI,
 	/* xiaomi add end */
 	DSI_CMD_SET_MAX
 };
