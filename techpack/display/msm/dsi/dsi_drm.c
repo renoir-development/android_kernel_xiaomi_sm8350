@@ -278,11 +278,6 @@ static void mi_dsi_bridge_pre_enable(struct drm_bridge *bridge)
  *            If timeout, dsi bridge will disable panel to avoid fingerprint
  *            touch by mistake.
  */
-/**
-* fold_status :  0 - unfold status
-*		1 - fold status
-*/
-extern int fold_status;
 
 int dsi_bridge_interface_enable(int timeout)
 {
@@ -296,42 +291,22 @@ int dsi_bridge_interface_enable(int timeout)
 		return -ETIMEDOUT;
 	}
 
-	if (!fold_status) {
-		/* primary dispaly early wakeup */
-		mutex_lock(&gbridge->lock);
-		if (atomic_read(&prim_panel_is_on) || atomic_read(&sec_panel_is_on)) {
-			mutex_unlock(&gbridge->lock);
-			return 0;
-		}
-		__pm_stay_awake(prim_panel_wakelock);
-		gbridge->dsi_mode.dsi_mode_flags = 0;
-		dsi_bridge_pre_enable(&gbridge->base);
-
-		if (timeout > 0)
-			schedule_delayed_work(&prim_panel_work, msecs_to_jiffies(timeout));
-		else
-			__pm_relax(prim_panel_wakelock);
-
+	/* primary dispaly early wakeup */
+	mutex_lock(&gbridge->lock);
+	if (atomic_read(&prim_panel_is_on) || atomic_read(&sec_panel_is_on)) {
 		mutex_unlock(&gbridge->lock);
-	} else {
-		/* secondary dispaly early wakeup */
-		mutex_lock(&gsec_bridge->lock);
-		if (atomic_read(&prim_panel_is_on) || atomic_read(&sec_panel_is_on)) {
-			mutex_unlock(&gsec_bridge->lock);
-			return 0;
-		}
-
-		__pm_stay_awake(sec_panel_wakelock);
-		gsec_bridge->dsi_mode.dsi_mode_flags = 0;
-		dsi_bridge_pre_enable(&gsec_bridge->base);
-
-		if (timeout > 0)
-			schedule_delayed_work(&sec_panel_work, msecs_to_jiffies(timeout));
-		else
-			__pm_relax(sec_panel_wakelock);
-
-		mutex_unlock(&gsec_bridge->lock);
+		return 0;
 	}
+	__pm_stay_awake(prim_panel_wakelock);
+	gbridge->dsi_mode.dsi_mode_flags = 0;
+	dsi_bridge_pre_enable(&gbridge->base);
+
+	if (timeout > 0)
+		schedule_delayed_work(&prim_panel_work, msecs_to_jiffies(timeout));
+	else
+		__pm_relax(prim_panel_wakelock);
+
+	mutex_unlock(&gbridge->lock);
 
 	return ret;
 }
