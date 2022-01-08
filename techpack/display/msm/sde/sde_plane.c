@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2014-2021 The Linux Foundation. All rights reserved.
+ * Copyright (C) 2014-2020 The Linux Foundation. All rights reserved.
  * Copyright (C) 2013 Red Hat
  * Author: Rob Clark <robdclark@gmail.com>
  *
@@ -122,10 +122,6 @@ struct sde_plane {
 	struct sde_csc_cfg csc_cfg;
 	struct sde_csc_cfg *csc_usr_ptr;
 	struct sde_csc_cfg *csc_ptr;
-
-	uint32_t cached_lut_flag;
-	struct sde_hw_scaler3_cfg scaler3_cfg;
-	struct sde_hw_pixel_ext pixel_ext;
 
 	const struct sde_sspp_sub_blks *pipe_sblk;
 
@@ -258,7 +254,7 @@ void sde_plane_set_sid(struct drm_plane *plane, u32 vm)
 	sde_hw_set_sspp_sid(sde_kms->hw_sid, psde->pipe, vm);
 }
 
-static void _sde_plane_set_qos_lut(struct drm_plane *plane,
+void _sde_plane_set_qos_lut(struct drm_plane *plane,
 		struct drm_crtc *crtc,
 		struct drm_framebuffer *fb)
 {
@@ -301,11 +297,11 @@ static void _sde_plane_set_qos_lut(struct drm_plane *plane,
 				fb->modifier);
 
 		if (fmt && SDE_FORMAT_IS_LINEAR(fmt) &&
-		    psde->scaler3_cfg.enable)
+		    pstate->scaler3_cfg.enable)
 			lut_index = SDE_QOS_LUT_USAGE_LINEAR_QSEED;
 		else if (fmt && SDE_FORMAT_IS_LINEAR(fmt))
 			lut_index = SDE_QOS_LUT_USAGE_LINEAR;
-		else if (psde->scaler3_cfg.enable)
+		else if (pstate->scaler3_cfg.enable)
 			lut_index = SDE_QOS_LUT_USAGE_MACROTILE_QSEED;
 		else
 			lut_index = SDE_QOS_LUT_USAGE_MACROTILE;
@@ -798,7 +794,7 @@ static int _sde_plane_setup_scaler3_lut(struct sde_plane *psde,
 		return -EINVAL;
 	}
 
-	cfg = &psde->scaler3_cfg;
+	cfg = &pstate->scaler3_cfg;
 
 	cfg->dir_lut = msm_property_get_blob(
 			&psde->property_info,
@@ -822,7 +818,7 @@ static int _sde_plane_setup_scaler3lite_lut(struct sde_plane *psde,
 {
 	struct sde_hw_scaler3_cfg *cfg;
 
-	cfg = &psde->scaler3_cfg;
+	cfg = &pstate->scaler3_cfg;
 
 	cfg->sep_lut = msm_property_get_blob(
 			&psde->property_info,
@@ -847,14 +843,14 @@ static void _sde_plane_setup_scaler3(struct sde_plane *psde,
 		return;
 	}
 
-	scale_cfg = &psde->scaler3_cfg;
+	scale_cfg = &pstate->scaler3_cfg;
 	src_w = psde->pipe_cfg.src_rect.w;
 	src_h = psde->pipe_cfg.src_rect.h;
 	dst_w = psde->pipe_cfg.dst_rect.w;
 	dst_h = psde->pipe_cfg.dst_rect.h;
 
 	memset(scale_cfg, 0, sizeof(*scale_cfg));
-	memset(&psde->pixel_ext, 0, sizeof(struct sde_hw_pixel_ext));
+	memset(&pstate->pixel_ext, 0, sizeof(struct sde_hw_pixel_ext));
 
 	/*
 	 * For inline rotation cases, scaler config is post-rotation,
@@ -916,14 +912,14 @@ static void _sde_plane_setup_scaler3(struct sde_plane *psde,
 
 		/* For pixel extension we need the pre-rotated orientation */
 		if (inline_rotation) {
-			psde->pixel_ext.num_ext_pxls_top[i] =
+			pstate->pixel_ext.num_ext_pxls_top[i] =
 				scale_cfg->src_width[i];
-			psde->pixel_ext.num_ext_pxls_left[i] =
+			pstate->pixel_ext.num_ext_pxls_left[i] =
 				scale_cfg->src_height[i];
 		} else {
-			psde->pixel_ext.num_ext_pxls_top[i] =
+			pstate->pixel_ext.num_ext_pxls_top[i] =
 				scale_cfg->src_height[i];
-			psde->pixel_ext.num_ext_pxls_left[i] =
+			pstate->pixel_ext.num_ext_pxls_left[i] =
 				scale_cfg->src_width[i];
 		}
 	}
@@ -1275,13 +1271,8 @@ static void _sde_plane_setup_scaler(struct sde_plane *psde,
 		return;
 	}
 
-	memcpy(&psde->scaler3_cfg, &pstate->scaler3_cfg,
-			sizeof(psde->scaler3_cfg));
-	memcpy(&psde->pixel_ext, &pstate->pixel_ext,
-			sizeof(psde->pixel_ext));
-
 	info = drm_format_info(fmt->base.pixel_format);
-	pe = &psde->pixel_ext;
+	pe = &pstate->pixel_ext;
 
 	psde->pipe_cfg.horz_decimation =
 		sde_plane_get_property(pstate, PLANE_PROP_H_DECIMATE);
@@ -1450,13 +1441,13 @@ static int _sde_plane_color_fill(struct sde_plane *psde,
 
 		if (psde->pipe_hw->ops.setup_pe)
 			psde->pipe_hw->ops.setup_pe(psde->pipe_hw,
-					&psde->pixel_ext);
+					&pstate->pixel_ext);
 		if (psde->pipe_hw->ops.setup_scaler &&
 				pstate->multirect_index != SDE_SSPP_RECT_1) {
 			psde->pipe_hw->ctl = _sde_plane_get_hw_ctl(plane);
 			psde->pipe_hw->ops.setup_scaler(psde->pipe_hw,
-					&psde->pipe_cfg, &psde->pixel_ext,
-					&psde->scaler3_cfg);
+					&psde->pipe_cfg, &pstate->pixel_ext,
+					&pstate->scaler3_cfg);
 		}
 	}
 
@@ -3011,7 +3002,7 @@ static void _sde_plane_update_roi_config(struct drm_plane *plane,
 	if (psde->pipe_hw->ops.setup_pe &&
 			(pstate->multirect_index != SDE_SSPP_RECT_1))
 		psde->pipe_hw->ops.setup_pe(psde->pipe_hw,
-				&psde->pixel_ext);
+				&pstate->pixel_ext);
 
 	/**
 	 * when programmed in multirect mode, scalar block will be
@@ -3022,8 +3013,8 @@ static void _sde_plane_update_roi_config(struct drm_plane *plane,
 			pstate->multirect_index != SDE_SSPP_RECT_1) {
 		psde->pipe_hw->ctl = _sde_plane_get_hw_ctl(plane);
 		psde->pipe_hw->ops.setup_scaler(psde->pipe_hw,
-				&psde->pipe_cfg, &psde->pixel_ext,
-				&psde->scaler3_cfg);
+				&psde->pipe_cfg, &pstate->pixel_ext,
+				&pstate->scaler3_cfg);
 	}
 
 	/* update excl rect */
@@ -3179,21 +3170,6 @@ static void _sde_plane_update_properties(struct drm_plane *plane,
 	pstate->dirty = 0x0;
 }
 
-static void _sde_plane_check_lut_dirty(struct sde_plane *psde,
-			struct sde_plane_state *pstate)
-{
-	/**
-	 * Valid configuration if scaler is not enabled or
-	 * lut flag is set
-	 */
-	if (pstate->scaler3_cfg.lut_flag || !pstate->scaler3_cfg.enable)
-		return;
-
-	pstate->scaler3_cfg.lut_flag = psde->cached_lut_flag;
-	SDE_EVT32(DRMID(&psde->base), pstate->scaler3_cfg.lut_flag,
-		SDE_EVTLOG_ERROR);
-}
-
 static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 				struct drm_plane_state *old_state)
 {
@@ -3245,16 +3221,10 @@ static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 			state->crtc_w, state->crtc_h,
 			state->crtc_x, state->crtc_y);
 
-	/* Caching the valid lut flag in sde plane */
-	if (pstate->scaler3_cfg.enable &&
-			pstate->scaler3_cfg.lut_flag)
-		psde->cached_lut_flag = pstate->scaler3_cfg.lut_flag;
-
 	/* force reprogramming of all the parameters, if the flag is set */
 	if (psde->revalidate) {
 		SDE_DEBUG("plane:%d - reconfigure all the parameters\n",
 				plane->base.id);
-		_sde_plane_check_lut_dirty(psde, pstate);
 		pstate->dirty = SDE_PLANE_DIRTY_ALL | SDE_PLANE_DIRTY_CP;
 		psde->revalidate = false;
 	}
@@ -3289,7 +3259,7 @@ static int sde_plane_sspp_atomic_update(struct drm_plane *plane,
 	_sde_plane_set_scanout(plane, pstate, &psde->pipe_cfg, fb);
 
 	is_rt = sde_crtc_is_rt_client(crtc, crtc->state);
-	if (is_rt != psde->is_rt_pipe || crtc->state->mode_changed) {
+	if (is_rt != psde->is_rt_pipe) {
 		psde->is_rt_pipe = is_rt;
 		pstate->dirty |= SDE_PLANE_DIRTY_QOS;
 	}
@@ -3574,7 +3544,6 @@ static void _sde_plane_setup_capabilities_blob(struct sde_plane *psde,
 	bool is_master = !psde->is_virtual;
 	const struct sde_format_extended *format_list;
 	u32 index;
-	int pipe_id;
 
 	if (is_master) {
 		format_list = psde->pipe_sblk->format_list;
@@ -3613,22 +3582,13 @@ static void _sde_plane_setup_capabilities_blob(struct sde_plane *psde,
 			psde->pipe_sblk->max_per_pipe_bw * 1000LL);
 	sde_kms_info_add_keyint(info, "max_per_pipe_bw_high",
 			psde->pipe_sblk->max_per_pipe_bw_high * 1000LL);
-
-	if (psde->pipe <= SSPP_VIG3 && psde->pipe >= SSPP_VIG0)
-		pipe_id = psde->pipe -  SSPP_VIG0;
-	else if (psde->pipe <= SSPP_RGB3 && psde->pipe >= SSPP_RGB0)
-		pipe_id = psde->pipe -  SSPP_RGB0;
-	else if (psde->pipe <= SSPP_DMA3 && psde->pipe >= SSPP_DMA0)
-		pipe_id = psde->pipe -  SSPP_DMA0;
-	else
-		pipe_id = -1;
-
-	sde_kms_info_add_keyint(info, "pipe_idx", pipe_id);
-
 	index = (master_plane_id == 0) ? 0 : 1;
 	if (catalog->has_demura &&
-	    catalog->demura_supported[psde->pipe][index] != ~0x0)
+	    catalog->demura_supported[psde->pipe][index] != ~0x0) {
 		sde_kms_info_add_keyint(info, "demura_block", index);
+		sde_kms_info_add_keyint(info, "demura_pipe_id",
+				psde->pipe - SSPP_DMA0);
+	}
 
 	if (psde->features & BIT(SDE_SSPP_SEC_UI_ALLOWED))
 		sde_kms_info_add_keyint(info, "sec_ui_allowed", 1);

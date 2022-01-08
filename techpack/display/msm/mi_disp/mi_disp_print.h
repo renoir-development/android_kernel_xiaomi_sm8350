@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -10,10 +11,8 @@
 #include <linux/compiler.h>
 #include <linux/printk.h>
 
-#include "mi_disp_config.h"
 #include "mi_disp_debugfs.h"
 
-#if MI_DISP_PRINT_ENABLE
 #define DISP_NAME    "mi_disp"
 
 __printf(2, 3)
@@ -55,24 +54,5 @@ void mi_disp_dbg_utc(const char *format, ...);
 		else                                                 \
 			pr_debug("[debug]" fmt, ##__VA_ARGS__);         \
 	} while (0)
-#else /* !MI_DISP_PRINT_ENABLE */
-#define DISP_WARN(fmt, ...)     \
-			printk(KERN_WARNING, fmt, ##__VA_ARGS__)
-#define DISP_INFO(fmt, ...)     \
-			printk(KERN_INFO, fmt, ##__VA_ARGS__)
-#define DISP_ERROR(fmt, ...)    \
-			printk(KERN_ERR, fmt, ##__VA_ARGS__)
-#define DISP_DEBUG(fmt, ...)    \
-			pr_debug(fmt, ##__VA_ARGS__)
-
-#define DISP_UTC_WARN(fmt, ...)   \
-			printk(KERN_WARNING, fmt, ##__VA_ARGS__)
-#define DISP_UTC_INFO(fmt, ...)   \
-			printk(KERN_INFO, fmt, ##__VA_ARGS__)
-#define DISP_UTC_ERROR(fmt, ...)  \
-			printk(KERN_ERR, fmt, ##__VA_ARGS__)
-#define DISP_UTC_DEBUG(fmt, ...)  \
-			pr_debug(fmt, ##__VA_ARGS__)
-#endif
 
 #endif /* _MI_DISP_PRINT_H_ */

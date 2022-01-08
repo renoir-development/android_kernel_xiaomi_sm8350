@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #include <linux/list.h>
@@ -869,6 +870,67 @@ static int dsi_display_status_check_te(struct dsi_display *display,
 	return rc;
 }
 
+static int dsi_display_write_panel(struct dsi_display *display,
+								struct dsi_panel_cmd_set *cmd_sets)
+{
+	int rc = 0, i = 0;
+	ssize_t len;
+	u32 count;
+	struct dsi_cmd_desc *cmds;
+	enum dsi_cmd_set_state state;
+	struct dsi_display_mode *mode;
+	struct dsi_panel *panel = display->panel;
+	const struct mipi_dsi_host_ops *ops = panel->host->ops;
+
+	rc = dsi_display_clk_ctrl(display->dsi_clk_handle,
+				DSI_CORE_CLK, DSI_CLK_ON);
+	if (rc) {
+		pr_err("[%s] failed to enable DSI core clocks, rc=%d\n",
+		display->name, rc);
+		goto error;
+	}
+
+	mode = panel->cur_mode;
+
+	cmds = cmd_sets->cmds;
+	count = cmd_sets->count;
+	state = cmd_sets->state;
+
+	if (count == 0) {
+		pr_debug("[%s] No commands to be sent for state\n",
+		panel->name);
+		goto error;
+	}
+
+	for (i = 0; i < count; i++) {
+		if (state == DSI_CMD_SET_STATE_LP)
+			cmds->msg.flags |= MIPI_DSI_MSG_USE_LPM;
+
+		if (cmds->last_command)
+			cmds->msg.flags |= MIPI_DSI_MSG_LASTCOMMAND;
+
+		len = ops->transfer(panel->host, &cmds->msg);//dsi_host_transfer,
+		if (len < 0) {
+			rc = len;
+			pr_err("failed to set cmds, rc=%d\n", rc);
+			goto error;
+		}
+		if (cmds->post_wait_ms)
+			usleep_range(cmds->post_wait_ms*1000,
+						((cmds->post_wait_ms*1000)+10));
+		cmds++;
+	}
+	rc = dsi_display_clk_ctrl(display->dsi_clk_handle,
+						DSI_CORE_CLK, DSI_CLK_OFF);
+	if (rc) {
+		pr_err("[%s] failed to disable DSI core clocks, rc=%d\n",
+		display->name, rc);
+		goto error;
+	}
+error:
+	return rc;
+}
+
 int dsi_display_check_status(struct drm_connector *connector, void *display,
 					bool te_check_override)
 {
@@ -918,8 +980,7 @@ int dsi_display_check_status(struct drm_connector *connector, void *display,
 	if (status_mode == ESD_MODE_REG_READ) {
 		config = &(panel->esd_config);
 		if (config->offset_cmd.count != 0) {
-			rc = mi_dsi_panel_write_cmd_set(dsi_display->panel,
-				&config->offset_cmd);
+			rc = dsi_display_write_panel(dsi_display, &config->offset_cmd);
 			DSI_DEBUG("%s: read reg offset command rc = %d\n",__func__, rc);
 		}
 	}
@@ -1054,7 +1115,7 @@ static int dsi_display_cmd_rx(struct dsi_display *display,
 	flags |= (DSI_CTRL_CMD_FETCH_MEMORY | DSI_CTRL_CMD_READ);
 	if ((m_ctrl->ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE) ||
 			((cmd->msg.flags & MIPI_DSI_MSG_CMD_DMA_SCHED) &&
-			 (display->enabled)))
+			 (display->panel->panel_initialized)))
 		flags |= DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
 
 	rc = dsi_ctrl_cmd_transfer(m_ctrl->ctrl, &cmd->msg, &flags);
@@ -1475,14 +1536,6 @@ static ssize_t debugfs_misr_setup(struct file *file,
 	display->misr_frame_count = frame_count;
 
 	mutex_lock(&display->display_lock);
-
-	if (!display->hw_ownership) {
-		DSI_DEBUG("[%s] op not supported due to HW unavailability\n",
-				display->name);
-		rc = -EOPNOTSUPP;
-		goto unlock;
-	}
-
 	rc = dsi_display_clk_ctrl(display->dsi_clk_handle,
 			DSI_CORE_CLK, DSI_CLK_ON);
 	if (rc) {
@@ -1534,14 +1587,6 @@ static ssize_t debugfs_misr_read(struct file *file,
 		return -ENOMEM;
 
 	mutex_lock(&display->display_lock);
-
-	if (!display->hw_ownership) {
-		DSI_DEBUG("[%s] op not supported due to HW unavailability\n",
-				display->name);
-		rc = -EOPNOTSUPP;
-		goto error;
-	}
-
 	rc = dsi_display_clk_ctrl(display->dsi_clk_handle,
 			DSI_CORE_CLK, DSI_CLK_ON);
 	if (rc) {
@@ -1639,15 +1684,6 @@ static ssize_t debugfs_esd_trigger_check(struct file *file,
 
 	display->esd_trigger = esd_trigger;
 
-	mutex_lock(&display->display_lock);
-
-	if (!display->hw_ownership) {
-		DSI_DEBUG("[%s] op not supported due to HW unavailability\n",
-				display->name);
-		rc = -EOPNOTSUPP;
-		goto unlock;
-	}
-
 	if (display->esd_trigger) {
 		DSI_INFO("ESD attack triggered by user\n");
 		rc = dsi_panel_trigger_esd_attack(display->panel,
@@ -1659,8 +1695,6 @@ static ssize_t debugfs_esd_trigger_check(struct file *file,
 	}
 
 	rc = len;
-unlock:
-	mutex_unlock(&display->display_lock);
 error:
 	kfree(buf);
 	return rc;
@@ -2666,7 +2700,7 @@ static int dsi_display_parse_boot_display_selection(void)
 		strlcpy(disp_buf, boot_displays[i].boot_param,
 			MAX_CMDLINE_PARAM_LEN);
 
-		pos = strnstr(disp_buf, ":", strlen(disp_buf));
+		pos = strnstr(disp_buf, ":", MAX_CMDLINE_PARAM_LEN);
 
 		/* Use ':' as a delimiter to retrieve the display name */
 		if (!pos) {
@@ -3203,12 +3237,8 @@ static int dsi_display_broadcast_cmd(struct dsi_display *display,
 		m_flags |= DSI_CTRL_CMD_LAST_COMMAND;
 	}
 
-	/*
-	 * During broadcast command dma scheduling is always recommended.
-	 * As long as the display is enabled and TE is running the
-	 * DSI_CTRL_CMD_CUSTOM_DMA_SCHED flag should be set.
-	 */
-	if (display->enabled) {
+	if ((msg->flags & MIPI_DSI_MSG_CMD_DMA_SCHED) &&
+				(display->panel->panel_initialized)) {
 		flags |= DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
 		m_flags |= DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
 	}
@@ -3384,16 +3414,12 @@ static ssize_t dsi_host_transfer(struct mipi_dsi_host *host,
 			cmd_flags |= DSI_CTRL_CMD_ASYNC_WAIT;
 
 		if ((msg->flags & MIPI_DSI_MSG_CMD_DMA_SCHED) &&
-				(display->enabled))
+				(display->panel->panel_initialized))
 			cmd_flags |= DSI_CTRL_CMD_CUSTOM_DMA_SCHED;
-
-		if (msg->type == MIPI_DSI_DCS_READ)
-			cmd_flags |= DSI_CTRL_CMD_READ;
 
 		rc = dsi_ctrl_cmd_transfer(display->ctrl[ctrl_idx].ctrl, msg,
 				&cmd_flags);
-		if ((msg->type == MIPI_DSI_DCS_READ && rc ==0)
-			||(msg->type != MIPI_DSI_DCS_READ && rc)) {
+		if (rc) {
 			DSI_ERR("[%s] cmd transfer failed, rc=%d\n",
 			       display->name, rc);
 			goto error_disable_cmd_engine;
@@ -4282,13 +4308,10 @@ static int dsi_display_res_init(struct dsi_display *display)
 	 * In trusted vm, the connectors will not be enabled
 	 * until the HW resources are assigned and accepted.
 	 */
-	if (display->trusted_vm_env) {
+	if (display->trusted_vm_env)
 		display->is_active = false;
-		display->hw_ownership = false;
-	} else {
+	else
 		display->is_active = true;
-		display->hw_ownership = true;
-	}
 
 	return 0;
 error_ctrl_put:
@@ -4721,6 +4744,7 @@ static int _dsi_display_dyn_update_clks(struct dsi_display *display,
 		dsi_phy_dynamic_refresh_clear(ctrl->phy);
 	}
 
+defer_dfps_wait:
 	rc = dsi_clk_update_parent(enable_clk,
 			&display->clock_info.mux_clks);
 	if (rc)
@@ -4752,20 +4776,7 @@ recover_byte_clk:
 exit:
 	dsi_clk_disable_unprepare(&display->clock_info.src_clks);
 
-defer_dfps_wait:
 	return rc;
-}
-
-void dsi_display_dfps_update_parent(struct dsi_display *display)
-{
-	int rc = 0;
-
-	rc = dsi_clk_update_parent(&display->clock_info.src_clks,
-			      &display->clock_info.mux_clks);
-	if (rc)
-		DSI_ERR("could not switch back to src clks %d\n", rc);
-
-	dsi_clk_disable_unprepare(&display->clock_info.src_clks);
 }
 
 static int dsi_display_dynamic_clk_switch_vid(struct dsi_display *display,
@@ -5543,32 +5554,18 @@ end:
 
 static int dsi_display_pre_release(void *data)
 {
-	struct dsi_display *display;
-
 	if (!data)
 		return -EINVAL;
 
-	display = (struct dsi_display *)data;
-	mutex_lock(&display->display_lock);
-	display->hw_ownership = false;
-	mutex_unlock(&display->display_lock);
-
-	dsi_display_ctrl_irq_update(display, false);
+	dsi_display_ctrl_irq_update((struct dsi_display *)data, false);
 
 	return 0;
 }
 
 static int dsi_display_pre_acquire(void *data)
 {
-	struct dsi_display *display;
-
 	if (!data)
 		return -EINVAL;
-
-	display = (struct dsi_display *)data;
-	mutex_lock(&display->display_lock);
-	display->hw_ownership = true;
-	mutex_unlock(&display->display_lock);
 
 	dsi_display_ctrl_irq_update((struct dsi_display *)data, true);
 
@@ -5804,8 +5801,6 @@ error_ctrl_deinit:
 		display_ctrl = &display->ctrl[i];
 		(void)dsi_phy_drv_deinit(display_ctrl->phy);
 		(void)dsi_ctrl_drv_deinit(display_ctrl->ctrl);
-		dsi_ctrl_put(display_ctrl->ctrl);
-		dsi_phy_put(display_ctrl->phy);
 	}
 	(void)dsi_display_debugfs_deinit(display);
 error:
@@ -6036,8 +6031,7 @@ int dsi_display_dev_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, display);
 
 	/* initialize display in firmware callback */
-	if (!(boot_displays[DSI_PRIMARY].boot_disp_en ||
-			boot_displays[DSI_SECONDARY].boot_disp_en) &&
+	if (!boot_disp->boot_disp_en &&
 			IS_ENABLED(CONFIG_DSI_PARSER) &&
 			!display->trusted_vm_env) {
 		if (!strcmp(display->display_type, "primary"))
@@ -7391,6 +7385,8 @@ int dsi_display_set_mode(struct dsi_display *display,
 	struct dsi_display_mode adj_mode;
 	struct dsi_mode_info timing;
 	struct disp_event event;
+	struct mi_disp_notifier notify_data;
+	int fps;
 
 	if (!display || !mode || !display->panel) {
 		DSI_ERR("Invalid params\n");
@@ -7440,6 +7436,10 @@ int dsi_display_set_mode(struct dsi_display *display,
 	mi_disp_feature_event_notify(&event, (u8 *)&timing.refresh_rate);
 
 	if (display->panel->cur_mode->timing.refresh_rate != timing.refresh_rate) {
+		fps = timing.refresh_rate;
+		notify_data.data = &fps;
+		notify_data.disp_id = mi_get_disp_id(display);
+		mi_disp_notifier_call_chain(MI_DISP_FPS_CHANGE_EVENT, &notify_data);
 		mi_disp_feature_sysfs_notify(event.disp_id, MI_SYSFS_DYNAMIC_FPS);
 	}
 
@@ -7831,7 +7831,6 @@ int dsi_display_prepare(struct dsi_display *display)
 	SDE_EVT32(SDE_EVTLOG_FUNC_ENTRY);
 	mutex_lock(&display->display_lock);
 
-	display->hw_ownership = true;
 	mode = display->panel->cur_mode;
 
 	dsi_display_set_ctrl_esd_check_flag(display, false);
@@ -8300,16 +8299,6 @@ int dsi_display_enable(struct dsi_display *display)
 			}
 		}
 
-		if (mi_get_disp_id(display) == MI_DISP_PRIMARY && display->panel->mi_cfg.panel_id == 0x4B3800420200) {
-			mi_dsi_panel_lhbm_set(display->panel);
-		}
-
-		rc = mi_dsi_panel_read_flatmode_param(display->panel);
-		if (rc) {
-			DSI_ERR("[%s] failed to read flatmode param, rc=%d\n",
-				display->name, rc);
-		}
-
 		return 0;
 	}
 
@@ -8711,7 +8700,6 @@ int dsi_display_unprepare(struct dsi_display *display)
 			DSI_ERR("[%s] panel post-unprepare failed, rc=%d\n",
 			       display->name, rc);
 	}
-	display->hw_ownership = false;
 
 	mutex_unlock(&display->display_lock);
 

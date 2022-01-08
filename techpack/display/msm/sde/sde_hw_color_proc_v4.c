@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  */
 #include <drm/msm_drm_pp.h>
 #include "sde_hw_color_proc_common_v4.h"
@@ -283,8 +283,7 @@ void sde_setup_dspp_ltm_threshv1(struct sde_hw_dspp *ctx, void *cfg)
 	}
 
 	if (!hw_cfg->payload) {
-		DRM_DEBUG_DRIVER("Disable LTM noise thresh feature\n");
-		SDE_REG_WRITE(&ctx->hw, ctx->cap->sblk->ltm.base + 0x60, 0);
+		DRM_ERROR("invalid payload parameters for ltm thresh param\n");
 		return;
 	}
 
@@ -339,7 +338,7 @@ void sde_setup_dspp_ltm_hist_ctrlv1(struct sde_hw_dspp *ctx, void *cfg,
 		if (op_mode & BIT(1))
 			op_mode &= ~BIT(0);
 		else
-			op_mode &= LTM_CONFIG_MERGE_MODE_ONLY;
+			op_mode = 0;
 
 		SDE_REG_WRITE(&ctx->hw, ctx->cap->sblk->ltm.base + 0x4,
 			(op_mode & 0x1FFFFFF));
@@ -396,21 +395,6 @@ void sde_ltm_read_intr_status(struct sde_hw_dspp *ctx, u32 *status)
 	clear = SDE_REG_READ(&ctx->hw, ctx->cap->sblk->ltm.base + 0x58);
 	clear |= BIT(1) | BIT(2);
 	SDE_REG_WRITE(&ctx->hw, ctx->cap->sblk->ltm.base + 0x58, clear);
-}
-
-void sde_ltm_clear_merge_mode(struct sde_hw_dspp *ctx)
-{
-	u32 clear;
-
-	if (!ctx) {
-		DRM_ERROR("invalid parameters ctx %pK\n", ctx);
-		return;
-	}
-
-	/* clear the merge_mode bit */
-	clear = SDE_REG_READ(&ctx->hw, ctx->cap->sblk->ltm.base + 0x04);
-	clear &= ~LTM_CONFIG_MERGE_MODE_ONLY;
-	SDE_REG_WRITE(&ctx->hw, ctx->cap->sblk->ltm.base + 0x04, clear);
 }
 
 void sde_demura_backlight_cfg(struct sde_hw_dspp *dspp, u64 val)

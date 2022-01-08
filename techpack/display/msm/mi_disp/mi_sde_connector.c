@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -112,14 +113,15 @@ static int mi_sde_get_fod_hbm_target_brightness(struct dsi_display *display)
 	int brightness_clone = 0;
 	int target = LOCAL_HBM_TARGET_BRIGHTNESS_WHITE_1000NIT;
 
-	if (display->panel->mi_cfg.feature_val[DISP_FEATURE_LOW_BRIGHTNESS_FOD]) {
+	if (display->panel->mi_cfg.feature_val[DISP_FEATURE_LOW_BRIGHTNESS_FOD]
+			&& display->panel->mi_cfg.fod_low_brightness_allow) {
 		if (is_aod_and_panel_initialized(display->panel) ||
 				display->panel->power_mode == SDE_MODE_DPMS_OFF) {
 			if (display->panel->mi_cfg.feature_val[DISP_FEATURE_SENSOR_LUX] <
 					display->panel->mi_cfg.fod_low_brightness_lux_threshold)
 				target = LOCAL_HBM_TARGET_BRIGHTNESS_WHITE_110NIT;
 		} else {
-			brightness_clone = display->panel->mi_cfg.brightness_clone;
+			mi_dsi_panel_get_brightness_clone(display->panel, &brightness_clone);
 			if (brightness_clone < display->panel->mi_cfg.fod_low_brightness_clone_threshold
 				&& (display->panel->mi_cfg.feature_val[DISP_FEATURE_SENSOR_LUX] <
 					display->panel->mi_cfg.fod_low_brightness_lux_threshold + 10)) {
@@ -205,8 +207,6 @@ int mi_sde_connector_panel_ctl(struct drm_connector *connector, uint32_t op_code
 
 	mi_cfg = &dsi_display->panel->mi_cfg;
 
-	mutex_lock(&dsi_display->panel->panel_lock);
-
 	switch (op_code) {
 	case MI_FOD_HBM_ON:
 		if (mi_cfg->local_hbm_enabled) {
@@ -216,21 +216,18 @@ int mi_sde_connector_panel_ctl(struct drm_connector *connector, uint32_t op_code
 				mi_cfg->local_hbm_target = LOCAL_HBM_TARGET_BRIGHTNESS_GREEN_500NIT;
 				break;
 			}
+
 			mi_cfg->local_hbm_target = mi_sde_get_fod_hbm_target_brightness(dsi_display);
 			if (mi_cfg->feature_val[DISP_FEATURE_FP_STATUS] == ENROLL_START)
 				mi_cfg->local_hbm_target = LOCAL_HBM_TARGET_BRIGHTNESS_WHITE_1000NIT;
 
 			if (mi_cfg->local_hbm_target == LOCAL_HBM_TARGET_BRIGHTNESS_WHITE_1000NIT) {
-				if (is_aod_and_panel_initialized(dsi_display->panel) && (!mi_cfg->fod_anim_layer_enabled ||
-				mi_cfg->panel_state == PANEL_STATE_DOZE_HIGH ||
-				mi_cfg->panel_state == PANEL_STATE_DOZE_LOW))
+				if (is_aod_and_panel_initialized(dsi_display->panel) && !mi_cfg->fod_anim_layer_enabled)
 					ctl.feature_val = LOCAL_HBM_HLPM_WHITE_1000NIT;
 				else
 					ctl.feature_val = LOCAL_HBM_NORMAL_WHITE_1000NIT;
 			} else if (mi_cfg->local_hbm_target == LOCAL_HBM_TARGET_BRIGHTNESS_WHITE_110NIT) {
-				if (is_aod_and_panel_initialized(dsi_display->panel) && (!mi_cfg->fod_anim_layer_enabled ||
-				mi_cfg->panel_state == PANEL_STATE_DOZE_HIGH ||
-				mi_cfg->panel_state == PANEL_STATE_DOZE_LOW))
+				if (is_aod_and_panel_initialized(dsi_display->panel) && !mi_cfg->fod_anim_layer_enabled)
 					ctl.feature_val = LOCAL_HBM_HLPM_WHITE_110NIT;
 				else
 					ctl.feature_val = LOCAL_HBM_NORMAL_WHITE_110NIT;
@@ -246,8 +243,6 @@ int mi_sde_connector_panel_ctl(struct drm_connector *connector, uint32_t op_code
 			if (is_aod_and_panel_initialized(dsi_display->panel)) {
 				if (mi_cfg->feature_val[DISP_FEATURE_FP_STATUS] == AUTH_STOP) {
 					ctl.feature_val = LOCAL_HBM_OFF_TO_NORMAL_BACKLIGHT_RESTORE;
-					mi_cfg->doze_brightness = DOZE_TO_NORMAL; /*TODO*/
-					mi_cfg->doze_brightness_backup = DOZE_TO_NORMAL;
 				} else if (mi_cfg->fod_anim_layer_enabled) {
 					ctl.feature_val = LOCAL_HBM_OFF_TO_NORMAL_BACKLIGHT;
 				} else if (dsi_display->panel->mi_cfg.doze_brightness == DOZE_BRIGHTNESS_HBM) {
@@ -274,9 +269,6 @@ int mi_sde_connector_panel_ctl(struct drm_connector *connector, uint32_t op_code
 	default:
 		break;
 	}
-
-	mutex_unlock(&dsi_display->panel->panel_lock);
-
 	SDE_ATRACE_BEGIN("mi_sde_connector_panel_ctl");
 	ret = mi_dsi_display_set_disp_param(c_conn->display, &ctl);
 	SDE_ATRACE_END("mi_sde_connector_panel_ctl");
@@ -288,52 +280,6 @@ void mi_sde_connector_update_layer_state(struct drm_connector *connector,
 {
 	struct sde_connector *c_conn = to_sde_connector(connector);
 	c_conn->mi_layer_state.mi_layer_type = mi_layer_type;
-}
-
-int mi_sde_connector_gir_fence(struct drm_connector *connector)
-{
-	int rc = 0;
-	struct sde_connector *c_conn;
-	struct dsi_display *dsi_display;
-	struct mi_dsi_panel_cfg *mi_cfg;
-
-	if (!connector) {
-		DISP_ERROR("invalid connector ptr\n");
-		return -EINVAL;
-	}
-
-	c_conn = to_sde_connector(connector);
-
-	if (c_conn->connector_type != DRM_MODE_CONNECTOR_DSI)
-		return 0;
-
-	dsi_display = (struct dsi_display *) c_conn->display;
-	if (!dsi_display || !dsi_display->panel) {
-		DISP_ERROR("invalid display/panel ptr\n");
-		return -EINVAL;
-	}
-
-	if (mi_get_disp_id(dsi_display) != MI_DISP_PRIMARY)
-		return -EINVAL;
-
-	mi_cfg = &dsi_display->panel->mi_cfg;
-	if ((mi_cfg->gir_enabled == false)
-			&& mi_cfg->feature_val[DISP_FEATURE_GIR] == FEATURE_ON) {
-		SDE_ATRACE_BEGIN("DISP_FEATURE_GIR_ON");
-		dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_MI_FLAT_MODE_ON);
-		sde_encoder_wait_for_event(c_conn->encoder,MSM_ENC_VBLANK);
-		SDE_ATRACE_END("DISP_FEATURE_GIR_ON");
-		mi_cfg->gir_enabled = true;
-	} else if (mi_cfg->gir_enabled == true
-				&& mi_cfg->feature_val[DISP_FEATURE_GIR] == FEATURE_OFF) {
-		SDE_ATRACE_BEGIN("DISP_FEATURE_GIR_OFF");
-		dsi_panel_tx_cmd_set(dsi_display->panel, DSI_CMD_SET_MI_FLAT_MODE_OFF);
-		sde_encoder_wait_for_event(c_conn->encoder,MSM_ENC_VBLANK);
-		SDE_ATRACE_END("DISP_FEATURE_GIR_OFF");
-		mi_cfg->gir_enabled = false;
-	}
-
-	return rc;
 }
 
 int mi_sde_connector_fod_hbm_fence(struct drm_connector *connector)
@@ -374,11 +320,9 @@ int mi_sde_connector_fod_hbm_fence(struct drm_connector *connector)
 		}
 	} else {
 		if (is_aod_and_panel_initialized(dsi_display->panel) && mi_cfg->fod_anim_layer_enabled) {
-			if (c_conn->mi_layer_state.mi_layer_type & MI_DIMLAYER_AOD) {
-				mi_sde_connector_panel_ctl(connector, MI_FOD_NORMAL_TO_AOD);
-				mi_cfg->fod_anim_layer_enabled = false;
-			}
+			mi_sde_connector_panel_ctl(connector, MI_FOD_NORMAL_TO_AOD);
 		}
+		mi_cfg->fod_anim_layer_enabled = false;
 	}
 #if 0
     if (mi_cfg->local_hbm_enabled) {

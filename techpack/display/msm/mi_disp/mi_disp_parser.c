@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -14,9 +15,6 @@
 #include "dsi_parser.h"
 
 #include "mi_disp_print.h"
-#include <linux/soc/qcom/smem.h>
-
-#define SMEM_SW_DISPLAY_DEMURA_TABLE 498
 
 #define DEFAULT_HBM_BL_MIN_LEVEL 1
 #define DEFAULT_HBM_BL_MAX_LEVEL 2047
@@ -62,61 +60,32 @@ static int mi_dsi_panel_parse_gamma_config(struct dsi_panel *panel)
 		rc = utils->read_u32(utils->data,
 				"mi,mdss-dsi-panel-gamma-update-b8-index",
 				&mi_cfg->gamma_cfg.update_b8_index);
-		if (rc) {
-			mi_cfg->gamma_cfg.update_b8_index = -1;
+		if (rc)
 			DISP_INFO("failed to get mi,mdss-dsi-panel-gamma-update-b8-index\n");
-		}
 
 		rc = utils->read_u32(utils->data,
 				"mi,mdss-dsi-panel-gamma-update-b9-index",
 				&mi_cfg->gamma_cfg.update_b9_index);
-		if (rc) {
-			mi_cfg->gamma_cfg.update_b9_index = -1;
+		if (rc)
 			DISP_INFO("failed to get mi,mdss-dsi-panel-gamma-update-b9-index\n");
-		}
 
 		rc = utils->read_u32(utils->data,
 				"mi,mdss-dsi-panel-gamma-update-ba-index",
 				&mi_cfg->gamma_cfg.update_ba_index);
-		if (rc) {
-			mi_cfg->gamma_cfg.update_ba_index = -1;
+		if (rc)
 			DISP_INFO("failed to get mi,mdss-dsi-panel-gamma-update-ba-index\n");
-		}
 	}
 
 	return rc;
 }
 
-static int mi_dsi_panel_parse_flatmode_config(struct dsi_panel *panel)
-{
-	int rc = 0;
-	struct dsi_parser_utils *utils = &panel->utils;
-	struct mi_dsi_panel_cfg *mi_cfg = &panel->mi_cfg;
-
-	mi_cfg->flatmode_update_flag = utils->read_bool(utils->data,
-			"mi,flatmode-update-param-flag");
-	if (mi_cfg->flatmode_update_flag) {
-		DISP_INFO("mi,flatmode-update-param-flag is defined\n");
-		rc = utils->read_u32(utils->data, "mi,flatmode-on-b9-index",
-				&mi_cfg->flatmode_cfg.update_index);
-		if (rc) {
-			mi_cfg->flatmode_cfg.update_index = -1;
-			DISP_INFO("failed to get mi,flatmode-on-b9-index\n");
-		}
-	} else {
-		DISP_DEBUG("mi,flatmode-update-param-flag feature not defined\n");
-	}
-
-	return rc;
-}
 
 int mi_dsi_panel_parse_config(struct dsi_panel *panel)
 {
 	int rc = 0;
 	struct dsi_parser_utils *utils = &panel->utils;
 	struct mi_dsi_panel_cfg *mi_cfg = &panel->mi_cfg;
-	size_t item_size;
-	void * demura_ptr = NULL;
+
 	mi_cfg->dsi_panel = panel;
 
 	mi_cfg->bl_is_big_endian= utils->read_bool(utils->data,
@@ -128,13 +97,6 @@ int mi_dsi_panel_parse_config(struct dsi_panel *panel)
 		DISP_INFO("mi,panel-id not specified\n");
 	} else {
 		DISP_INFO("mi,panel-id is 0x%llx\n", mi_cfg->panel_id);
-		if (mi_cfg->panel_id == 0x4B3800420200) {
-			demura_ptr = qcom_smem_get(QCOM_SMEM_HOST_ANY, SMEM_SW_DISPLAY_DEMURA_TABLE, &item_size);
-			if (!IS_ERR(demura_ptr) && item_size > 0) {
-				DSI_INFO("demura data size %d\n", item_size);
-				memcpy(mi_cfg->demura_data, demura_ptr, item_size);
-			}
-		}
 	}
 
 	mi_cfg->hbm_51_ctl_flag = utils->read_bool(utils->data, "mi,hbm-51-ctl-flag");
@@ -258,20 +220,6 @@ int mi_dsi_panel_parse_config(struct dsi_panel *panel)
 	}
 
 	mi_cfg->aod_bl_51ctl = utils->read_bool(utils->data, "mi,aod-bl-51ctl-flag");
-	rc = utils->read_u32(utils->data, "mi,aod-hbm-51-index", &mi_cfg->aod_hbm_51_index);
-	if (rc) {
-		mi_cfg->aod_hbm_51_index = -1;
-		DISP_INFO("mi,aod-hbm-51-index not specified\n");
-	} else {
-		DISP_INFO("mi,aod-hbm-51-index is %d\n", mi_cfg->aod_hbm_51_index);
-	}
-	rc = utils->read_u32(utils->data, "mi,aod-lbm-51-index", &mi_cfg->aod_lbm_51_index);
-	if (rc) {
-		mi_cfg->aod_lbm_51_index = -1;
-		DISP_INFO("mi,aod-lbm-51-index not specified\n");
-	} else {
-		DISP_INFO("mi,aod-lbm-51-index is %d\n", mi_cfg->aod_lbm_51_index);
-	}
 
 	rc = utils->read_u32(utils->data, "mi,mdss-dsi-panel-dc-threshold", &mi_cfg->dc_threshold);
 	if (rc) {
@@ -301,38 +249,6 @@ int mi_dsi_panel_parse_config(struct dsi_panel *panel)
 			DISP_INFO("mi,local-hbm-off-to-hbm-51-index is %d\n", mi_cfg->local_hbm_off_to_hbm_51_index);
 		}
 
-		rc = utils->read_u32(utils->data, "mi,local-hbm-off-to-normal-51-index", &mi_cfg->local_hbm_off_to_normal_51_index);
-		if (rc) {
-			mi_cfg->local_hbm_off_to_normal_51_index = -1;
-			DISP_INFO("mi,local-hbm-off-to-normal-51-index not specified\n");
-		} else {
-			DISP_INFO("mi,local-hbm-off-to-normal-51-index is %d\n", mi_cfg->local_hbm_off_to_normal_51_index);
-		}
-
-		rc = utils->read_u32(utils->data, "mi,local-hbm-on-87-index", &mi_cfg->local_hbm_on_87_index);
-		if (rc) {
-			mi_cfg->local_hbm_on_87_index = -1;
-			DISP_INFO("mi,local-hbm-on-87-index not specified\n");
-		} else {
-			DISP_INFO("mi,local-hbm-on-87-index is %d\n", mi_cfg->local_hbm_on_87_index);
-		}
-
-		rc = utils->read_u32(utils->data, "mi,local-hbm-hlpm-on-87-index", &mi_cfg->local_hbm_hlpm_on_87_index);
-		if (rc) {
-			mi_cfg->local_hbm_hlpm_on_87_index = -1;
-			DISP_INFO("mi,local-hbm-hlpm-on-87-index not specified\n");
-		} else {
-			DISP_INFO("mi,local-hbm-hlpm-on-87-index is %d\n", mi_cfg->local_hbm_hlpm_on_87_index);
-		}
-
-		rc = utils->read_u32(utils->data, "mi,panel-cup-dbi-reg-index", &mi_cfg->cup_dbi_reg_index);
-		if (rc) {
-			mi_cfg->cup_dbi_reg_index = -1;
-			DISP_INFO("mi,panel-cup-dbi-reg-index not specified\n");
-		} else {
-			DISP_INFO("mi,panel-cup-dbi-reg-index is %d\n", mi_cfg->cup_dbi_reg_index);
-		}
-
 		rc = utils->read_u32(utils->data, "mi,doze-hbm-dbv-level", &mi_cfg->doze_hbm_dbv_level);
 		if (rc) {
 			mi_cfg->doze_hbm_dbv_level = 0;
@@ -355,11 +271,6 @@ int mi_dsi_panel_parse_config(struct dsi_panel *panel)
 		DISP_INFO("fp_display_on_optimize enabled\n");
 	}
 
-	mi_cfg->thermal_dimming = utils->read_bool(utils->data, "mi,thermal-dimming-flag");
-	if (mi_cfg->thermal_dimming) {
-		DISP_INFO("thermal_dimming enabled\n");
-	}
-
 	rc = utils->read_u32(utils->data, "mi,fod-low-brightness-clone-threshold", &mi_cfg->fod_low_brightness_clone_threshold);
 	if (rc) {
 		mi_cfg->fod_low_brightness_clone_threshold = 0;
@@ -374,6 +285,8 @@ int mi_dsi_panel_parse_config(struct dsi_panel *panel)
 
 	/* sensor lux init to 50000 to avoid sensor not update value */
 	mi_cfg->feature_val[DISP_FEATURE_SENSOR_LUX] = 50000;
+
+	mi_cfg->fod_low_brightness_allow = false;
 
 	rc = utils->read_u32(utils->data, "mi,fod-full-screen-hbm", &mi_cfg->fod_type);
 	if (rc) {
@@ -407,18 +320,6 @@ int mi_dsi_panel_parse_config(struct dsi_panel *panel)
 		mi_cfg->aod_exit_delay_time = 0;
 
 	DISP_INFO("aod exit delay %d\n", mi_cfg->aod_exit_delay_time);
-
-	rc = utils->read_u32(utils->data, "mi,panel-hbm-backlight-threshold", &mi_cfg->hbm_backlight_threshold);
-	if (rc)
-		mi_cfg->hbm_backlight_threshold = 8192;
-	DISP_INFO("panel hbm backlight threshold %d\n", mi_cfg->hbm_backlight_threshold);
-
-	rc = mi_dsi_panel_parse_flatmode_config(panel);
-
-	mi_cfg->doze_to_off_command_enabled = utils->read_bool(utils->data, "mi,panel-aod-to-off-command-need-enabled");
-	if (mi_cfg->doze_to_off_command_enabled) {
-		DISP_INFO("mi,panel-aod-to-off-command-need-enabled\n");
-	}
 
 	return rc;
 }

@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only WITH Linux-syscall-note */
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #ifndef _MI_DISP_H_
@@ -202,8 +203,6 @@ enum disp_feature_id {
 	DISP_FEATURE_AOD_TO_NORMAL,
 	DISP_FEATURE_COLOR_INVERT,
 	DISP_FEATURE_DC_BACKLIGHT,
-	DISP_FEATURE_GIR,
-	DISP_FEATURE_DBI,
 	DISP_FEATURE_MAX,
 };
 
@@ -336,10 +335,6 @@ static inline const char *get_disp_feature_id_name(int feature_id)
 		return "color_invert";
 	case DISP_FEATURE_DC_BACKLIGHT:
 		return "dc_backlight";
-	case DISP_FEATURE_DBI:
-		return "dbi";
-	case DISP_FEATURE_GIR:
-		return "gir";
 	default:
 		return "Unknown";
 	}

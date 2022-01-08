@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (C) 2020 XiaoMi, Inc.
  */
 
@@ -8,11 +9,8 @@
 #include <linux/rtc.h>
 #include <linux/time.h>
 
-#include "mi_disp_config.h"
-#include "mi_disp_debugfs.h"
 #include "mi_disp_print.h"
 
-#if MI_DISP_PRINT_ENABLE
 void mi_disp_printk(const char *level, const char *format, ...)
 {
 	struct va_format vaf;
@@ -95,4 +93,3 @@ void mi_disp_dbg_utc(const char *format, ...)
 	va_end(args);
 }
 
-#endif /* MI_DISP_PRINT_ENABLE */
