@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #define pr_fmt(fmt)	"[sde_rsc:%s:%d]: " fmt, __func__, __LINE__
@@ -744,8 +743,7 @@ static int sde_rsc_switch_to_idle(struct sde_rsc_priv *rsc,
 		if (!rc)
 			rc = CMD_MODE_SWITCH_SUCCESS;
 	} else if (clk_client_active) {
-		if (rsc->current_state != SDE_RSC_CLK_STATE)
-			rc = sde_rsc_switch_to_clk(rsc, wait_vblank_crtc_id);
+		rc = sde_rsc_switch_to_clk(rsc, wait_vblank_crtc_id);
 		if (!rc)
 			rc = CLK_MODE_SWITCH_SUCCESS;
 	} else if (rsc->hw_ops.state_update) {
@@ -927,13 +925,8 @@ int sde_rsc_client_state_update(struct sde_rsc_client *caller_client,
 		goto end;
 	}
 
-	if (rsc->current_state == SDE_RSC_IDLE_STATE) {
-		rc = sde_rsc_resource_enable(rsc);
-		if (rc) {
-			pr_err("failed to enable sde rsc power resources rc:%d\n", rc);
-			goto end;
-		}
-	}
+	if (rsc->current_state == SDE_RSC_IDLE_STATE)
+		sde_rsc_resource_enable(rsc);
 
 	switch (state) {
 	case SDE_RSC_IDLE_STATE:
