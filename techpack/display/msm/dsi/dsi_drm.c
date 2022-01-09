@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2020, The Linux Foundation. All rights reserved.
+ * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 
@@ -12,8 +13,11 @@
 #include "sde_connector.h"
 #include "dsi_drm.h"
 #include "sde_trace.h"
-#include "sde_dbg.h"
 #include "mi_dsi_display.h"
+#include "sde_encoder.h"
+#include "sde_dbg.h"
+#include <linux/pm_wakeup.h>
+#include "msm_drv.h"
 
 #define to_dsi_bridge(x)     container_of((x), struct dsi_bridge, base)
 #define to_dsi_state(x)      container_of((x), struct dsi_connector_state, base)
@@ -41,6 +45,7 @@ struct dsi_bridge *gsec_bridge;
 static struct delayed_work sec_panel_work;
 static atomic_t sec_panel_is_on;
 static struct wakeup_source *sec_panel_wakelock;
+
 
 static void convert_to_dsi_mode(const struct drm_display_mode *drm_mode,
 				struct dsi_display_mode *dsi_mode)
@@ -183,6 +188,7 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 	int rc = 0;
 	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
 	struct mi_disp_notifier notify_data;
+	struct mi_dsi_panel_cfg *mi_cfg = NULL;
 	int power_mode = 0;
 
 	if (!bridge) {
@@ -196,11 +202,7 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 	}
 
 	atomic_set(&c_bridge->display->panel->esd_recovery_pending, 0);
-
-	power_mode = sde_connector_get_lp(c_bridge->display->drm_conn);
-	notify_data.data = &power_mode;
-	notify_data.disp_id = mi_get_disp_id(c_bridge->display);
-	mi_disp_notifier_call_chain(MI_DISP_DPMS_EARLY_EVENT, &notify_data);
+	mi_cfg = &c_bridge->display->panel->mi_cfg;
 
 	/* By this point mode should have been validated through mode_fixup */
 	rc = dsi_display_set_mode(c_bridge->display,
@@ -209,6 +211,40 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 		DSI_ERR("[%d] failed to perform a mode set, rc=%d\n",
 		       c_bridge->id, rc);
 		return;
+	}
+
+	power_mode = sde_connector_get_lp(c_bridge->display->drm_conn);
+	notify_data.data = &power_mode;
+	notify_data.disp_id = mi_get_disp_id(c_bridge->display);
+	mi_disp_notifier_call_chain(MI_DISP_DPMS_EARLY_EVENT, &notify_data);
+
+	if ((!strcmp(c_bridge->display->display_type, "primary")) &&
+			atomic_read(&prim_panel_is_on) &&
+			mi_cfg->fp_display_on_optimize) {
+		cancel_delayed_work_sync(&prim_panel_work);
+		__pm_relax(prim_panel_wakelock);
+
+		if (c_bridge->display->panel->panel_mode == DSI_OP_VIDEO_MODE) {
+			DSI_INFO("skip set display config for video panel in fpc\n");
+			return;
+		} else if (c_bridge->display->panel->panel_mode == DSI_OP_CMD_MODE &&
+		    c_bridge->dsi_mode.dsi_mode_flags != DSI_MODE_FLAG_DMS) {
+			DSI_INFO("skip set display config because timming not switch for command panel\n");
+			return;
+		}
+	} else if ((!strcmp(c_bridge->display->display_type, "secondary")) &&
+			atomic_read(&sec_panel_is_on) &&
+			mi_cfg->fp_display_on_optimize) {
+		cancel_delayed_work_sync(&sec_panel_work);
+		__pm_relax(sec_panel_wakelock);
+		if (c_bridge->display->panel->panel_mode == DSI_OP_VIDEO_MODE) {
+			DSI_INFO("skip set display config for video panel in fpc\n");
+			return;
+		} else if (c_bridge->display->panel->panel_mode == DSI_OP_CMD_MODE &&
+		    c_bridge->dsi_mode.dsi_mode_flags != DSI_MODE_FLAG_DMS) {
+			DSI_INFO("skip set display config because timming not switch for command panel\n");
+			return;
+		}
 	}
 
 	if (c_bridge->dsi_mode.dsi_mode_flags &
@@ -236,14 +272,12 @@ static void dsi_bridge_pre_enable(struct drm_bridge *bridge)
 		(void)dsi_display_unprepare(c_bridge->display);
 	}
 
-	mi_disp_notifier_call_chain(MI_DISP_DPMS_EVENT, &notify_data);
 	SDE_ATRACE_END("dsi_display_enable");
 
 	rc = dsi_display_splash_res_cleanup(c_bridge->display);
 	if (rc)
 		DSI_ERR("Continuous splash pipeline cleanup failed, rc=%d\n",
 									rc);
-
 	if (!strcmp(c_bridge->display->display_type, "primary"))
 		atomic_set(&prim_panel_is_on, true);
 	else if (!strcmp(c_bridge->display->display_type, "secondary"))
@@ -278,6 +312,11 @@ static void mi_dsi_bridge_pre_enable(struct drm_bridge *bridge)
  *            If timeout, dsi bridge will disable panel to avoid fingerprint
  *            touch by mistake.
  */
+/**
+* fold_status :  0 - unfold status
+*		1 - fold status
+*/
+extern int fold_status;
 
 int dsi_bridge_interface_enable(int timeout)
 {
@@ -291,22 +330,42 @@ int dsi_bridge_interface_enable(int timeout)
 		return -ETIMEDOUT;
 	}
 
-	/* primary dispaly early wakeup */
-	mutex_lock(&gbridge->lock);
-	if (atomic_read(&prim_panel_is_on) || atomic_read(&sec_panel_is_on)) {
+	if (!fold_status) {
+		/* primary dispaly early wakeup */
+		mutex_lock(&gbridge->lock);
+		if (atomic_read(&prim_panel_is_on) || atomic_read(&sec_panel_is_on)) {
+			mutex_unlock(&gbridge->lock);
+			return 0;
+		}
+		__pm_stay_awake(prim_panel_wakelock);
+		gbridge->dsi_mode.dsi_mode_flags = 0;
+		dsi_bridge_pre_enable(&gbridge->base);
+
+		if (timeout > 0)
+			schedule_delayed_work(&prim_panel_work, msecs_to_jiffies(timeout));
+		else
+			__pm_relax(prim_panel_wakelock);
+
 		mutex_unlock(&gbridge->lock);
-		return 0;
+	} else {
+		/* secondary dispaly early wakeup */
+		mutex_lock(&gsec_bridge->lock);
+		if (atomic_read(&prim_panel_is_on) || atomic_read(&sec_panel_is_on)) {
+			mutex_unlock(&gsec_bridge->lock);
+			return 0;
+		}
+
+		__pm_stay_awake(sec_panel_wakelock);
+		gsec_bridge->dsi_mode.dsi_mode_flags = 0;
+		dsi_bridge_pre_enable(&gsec_bridge->base);
+
+		if (timeout > 0)
+			schedule_delayed_work(&sec_panel_work, msecs_to_jiffies(timeout));
+		else
+			__pm_relax(sec_panel_wakelock);
+
+		mutex_unlock(&gsec_bridge->lock);
 	}
-	__pm_stay_awake(prim_panel_wakelock);
-	gbridge->dsi_mode.dsi_mode_flags = 0;
-	dsi_bridge_pre_enable(&gbridge->base);
-
-	if (timeout > 0)
-		schedule_delayed_work(&prim_panel_work, msecs_to_jiffies(timeout));
-	else
-		__pm_relax(prim_panel_wakelock);
-
-	mutex_unlock(&gbridge->lock);
 
 	return ret;
 }
@@ -342,6 +401,12 @@ static void dsi_bridge_enable(struct drm_bridge *bridge)
 			sde_connector_schedule_status_work(display->drm_conn,
 				true);
 	}
+
+	rc = mi_dsi_display_esd_irq_ctrl(c_bridge->display, true);
+	if (rc) {
+		DSI_ERR("[%d] DSI display enable esd irq failed, rc=%d\n",
+				c_bridge->id, rc);
+	}
 }
 
 static void dsi_bridge_disable(struct drm_bridge *bridge)
@@ -358,6 +423,12 @@ static void dsi_bridge_disable(struct drm_bridge *bridge)
 	display = c_bridge->display;
 	private_flags =
 		bridge->encoder->crtc->state->adjusted_mode.private_flags;
+
+	rc = mi_dsi_display_esd_irq_ctrl(c_bridge->display, false);
+	if (rc) {
+		DSI_ERR("[%d] DSI display disable esd irq failed, rc=%d\n",
+				c_bridge->id, rc);
+	}
 
 	if (display && display->drm_conn) {
 		display->poms_pending =
@@ -378,6 +449,7 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 	int rc = 0;
 	struct dsi_bridge *c_bridge = to_dsi_bridge(bridge);
 	struct mi_disp_notifier notify_data;
+	struct mi_dsi_panel_cfg *mi_cfg = NULL;
 	int power_mode = 0;
 
 	if (!bridge) {
@@ -389,6 +461,8 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 		DSI_ERR("Incorrect bridge details\n");
 		return;
 	}
+
+	mi_cfg = &c_bridge->display->panel->mi_cfg;
 
 	power_mode = sde_connector_get_lp(c_bridge->display->drm_conn);
 	notify_data.data = &power_mode;
@@ -413,10 +487,8 @@ static void dsi_bridge_post_disable(struct drm_bridge *bridge)
 		SDE_ATRACE_END("dsi_bridge_post_disable");
 		return;
 	}
-
 	mi_disp_notifier_call_chain(MI_DISP_DPMS_EVENT, &notify_data);
 	SDE_ATRACE_END("dsi_bridge_post_disable");
-
 
 	if (!strcmp(c_bridge->display->display_type, "primary"))
 		atomic_set(&prim_panel_is_on, false);
