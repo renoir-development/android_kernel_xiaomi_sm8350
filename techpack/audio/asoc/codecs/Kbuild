@@ -265,15 +265,9 @@ ifeq ($(KERNEL_BUILD), 1)
 	obj-y	+= rouleur/
 endif
 
-ifneq (,$(filter $(TARGET_PRODUCT), venus star haydn))
+ifneq (,$(filter $(TARGET_PRODUCT), venus star haydn odin))
 	obj-y	+= cs35l41/
 endif
-
-ifneq (,$(filter $(TARGET_PRODUCT), cetus))
-	obj-y	+= cs35l45/
-endif
-
-obj-y	+= tfa98xx/
 
 # Module information used by KBuild framework
 obj-$(CONFIG_WCD9XXX_CODEC_CORE) += wcd_core_dlkm.o
@@ -314,3 +308,6 @@ endif
 
 obj-$(CONFIG_SND_SWR_HAPTICS) += swr_haptics_dlkm.o
 swr_haptics_dlkm-y := $(SWR_HAP_OBJS)
+
+# inject some build related information
+DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"

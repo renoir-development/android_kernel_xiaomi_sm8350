@@ -251,8 +251,10 @@ ifneq (,$(filter $(TARGET_PRODUCT),cetus))
 	CDEFINES += -DCONFIG_TARGET_PRODUCT_CETUS
 endif
 
-CDEFINES += -DCONFIG_SND_SOC_TFA9874_FOR_DAVI
-CDEFINES += -DTFA_NON_DSP_SOLUTION
+ifeq ($(TARGET_PRODUCT), renoir)
+	CDEFINES += -DCONFIG_SND_SOC_TFA9874_FOR_DAVI
+	CDEFINES += -DTFA_NON_DSP_SOLUTION
+endif
 
 CDEFINES +=	-DANI_LITTLE_BYTE_ENDIAN \
 		-DANI_LITTLE_BIT_ENDIAN \
@@ -263,6 +265,8 @@ CDEFINES +=	-DANI_LITTLE_BYTE_ENDIAN \
 		-Wall\
 		-Werror\
 		-D__linux__
+
+# CDEFINES += -DAUDIO_FORCE_RESTART_ADSP
 
 KBUILD_CPPFLAGS += $(CDEFINES)
 
@@ -315,3 +319,6 @@ q6_pdr_dlkm-y := $(QDSP6_PDR_OBJS)
 
 obj-$(CONFIG_MSM_QDSP6_NOTIFIER) += q6_notifier_dlkm.o
 q6_notifier_dlkm-y := $(QDSP6_NOTIFIER_OBJS)
+
+# inject some build related information
+DEFINES += -DBUILD_TIMESTAMP=\"$(shell date -u +'%Y-%m-%dT%H:%M:%SZ')\"
