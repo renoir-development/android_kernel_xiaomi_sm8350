@@ -84,6 +84,7 @@ const char *product_name_get(void)
 	switch (project){
 		case HARDWARE_PROJECT_J18: return "cetus";
 		case HARDWARE_PROJECT_K1:  return "star";
+		case HARDWARE_PROJECT_K8:  return "odin";
 		case HARDWARE_PROJECT_K2:  return "venus";
 		case HARDWARE_PROJECT_K1A: return "mars";
 		case HARDWARE_PROJECT_K9:  return "renoir";
