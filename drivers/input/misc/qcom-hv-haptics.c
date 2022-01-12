@@ -130,6 +130,7 @@
 #define HAP_CFG_AUTORES_CFG_REG			0x63
 #define AUTORES_EN_BIT				BIT(7)
 #define AUTORES_EN_DLY_MASK			GENMASK(5, 2)
+#define AUTORES_EN_DLY_6_CYCLE 0xc
 #define AUTORES_EN_DLY(cycles)			((cycles) * 2)
 #define AUTORES_EN_DLY_6_CYCLES			AUTORES_EN_DLY(6)
 #define AUTORES_EN_DLY_SHIFT			2
@@ -1649,6 +1650,7 @@ static int haptics_get_fifo_fill_status(struct haptics_chip *chip, u32 *fill)
 	return 0;
 }
 
+
 static int haptics_get_available_fifo_memory(struct haptics_chip *chip)
 {
 	int rc;
@@ -2424,6 +2426,8 @@ static int haptics_erase(struct input_dev *dev, int effect_id)
 	}
 	mutex_unlock(&play->lock);
 
+	mutex_unlock(&play->lock);
+
 	rc = haptics_enable_hpwr_vreg(chip, false);
 	if (rc < 0)
 		dev_err(chip->dev, "disable hpwr_vreg failed, rc=%d\n");
@@ -2660,7 +2664,7 @@ static irqreturn_t fifo_empty_irq_handler(int irq, void *data)
 		dev_info(chip->dev, "FIFO playing is done\n");
 	} else {
 		if (atomic_read(&status->cancelled) == 1) {
-			dev_dbg(chip->dev, "FIFO programming got cancelled\n");
+			dev_info(chip->dev, "FIFO programming got cancelled\n");
 			goto unlock;
 		}
 
@@ -3869,6 +3873,7 @@ static int haptics_parse_dt(struct haptics_chip *chip)
 #ifdef CONFIG_TARGET_PRODUCT_HAYDN
 	config->vmax_mv = 1200;
 #endif
+
 	config->fifo_empty_thresh = FIFO_EMPTY_THRESHOLD(chip);
 	of_property_read_u32(node, "qcom,fifo-empty-threshold",
 			&config->fifo_empty_thresh);
