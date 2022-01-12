@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013, Sony Mobile Communications AB.
- * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
  * Copyright (C) 2021 XiaoMi, Inc.
+ * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
  */
 
 #include <linux/delay.h>
@@ -1616,6 +1616,11 @@ int msm_pinctrl_probe(struct platform_device *pdev,
 	platform_set_drvdata(pdev, pctrl);
 
 	dev_dbg(&pdev->dev, "Probed Qualcomm pinctrl driver\n");
+
+#ifdef CONFIG_PINCTRL_SM7325
+	return 0;
+#endif
+
 #ifdef CONFIG_PINCTRL_RENOIR
 	pr_err("Disable GPIO151, 202  wakeup\n");
 	msm_gpio_mpm_wake_set(151, false);
