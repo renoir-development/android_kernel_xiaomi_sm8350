@@ -1773,7 +1773,6 @@ static int geni_se_probe(struct platform_device *pdev)
 #if IS_ENABLED(CONFIG_SERIAL_MSM_GENI_CONSOLE)
 	geni_se_dev->wrapper_rsc.wrapper_dev = dev;
 	geni_se_dev->wrapper_rsc.ctrl_dev = dev;
-
 	ret = geni_se_resources_init(&geni_se_dev->wrapper_rsc,
 					UART_CONSOLE_CORE2X_VOTE,
 					(DEFAULT_SE_CLK * DEFAULT_BUS_WIDTH));
