@@ -244,6 +244,7 @@ enum xm_property_id {
 	XM_PROP_OP_MODE,
 	XM_PROP_WLS_DIE_TEMP,
 	/**********************/
+	XM_PROP_UNK_1,
 	XM_PROP_INPUT_SUSPEND,
 	XM_PROP_REAL_TYPE,
 	/*used for pd authentic*/
