@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #ifndef _WCD938X_H
@@ -85,8 +84,6 @@ static inline int wcd938x_slave_get_master_ch_val(int ch)
 
 static inline int wcd938x_slave_get_master_ch(int idx)
 {
-	if (idx < 0 || idx >= ARRAY_SIZE(swr_master_ch_map))
-		idx = 0;
 	return swr_master_ch_map[idx];
 }
 
