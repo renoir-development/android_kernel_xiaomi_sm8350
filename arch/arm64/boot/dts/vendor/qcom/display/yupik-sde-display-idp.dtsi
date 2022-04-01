@@ -89,6 +89,10 @@
 	qcom,mdss-dsi-bl-max-level = <4095>;
 	qcom,mdss-brightness-init-level = <307>;
 	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-dsi-factory-bl-max-level = <2047>;
+	qcom,mdss-factory-brightness-max-level = <2047>;
+	qcom,mdss-dsi-panel-peak-brightness = <4200000>;
+	qcom,mdss-dsi-panel-blackness-level = <3230>;
 	qcom,platform-te-gpio = <&tlmm 80 0>;
 	qcom,platform-reset-gpio = <&tlmm 44 0>;
 };
@@ -100,6 +104,8 @@
 	qcom,mdss-dsi-bl-max-level = <4095>;
 	qcom,mdss-brightness-init-level = <307>;
 	qcom,mdss-brightness-max-level = <4095>;
+	qcom,mdss-dsi-factory-bl-max-level = <2047>;
+	qcom,mdss-factory-brightness-max-level = <2047>;
 	qcom,platform-te-gpio = <&tlmm 80 0>;
 	qcom,platform-reset-gpio = <&tlmm 44 0>;
 };
