@@ -1248,6 +1248,7 @@ static int msm_pcm_capture_copy(struct snd_pcm_substream *substream,
 	pr_debug("Size = %d\n", size);
 	pr_debug("fbytes = %lu\n", fbytes);
 	pr_debug("idx = %d\n", idx);
+	pr_debug("period_size = %d\n", prtd->pcm_count);
 	if (bufptr) {
 		xfer = fbytes;
 		if (xfer > size)
@@ -2284,7 +2285,7 @@ static int msm_pcm_playback_app_type_cfg_ctl_put(struct snd_kcontrol *kcontrol,
 		cfg_data.bit_width = ucontrol->value.integer.value[5];
 	if (ucontrol->value.integer.value[6] != 0)
 		cfg_data.copp_perf_mode = ucontrol->value.integer.value[6];
-	pr_debug("%s: fe_id- %llu session_type- %d be_id- %d app_type- %d acdb_dev_id- %d"
+	pr_err("%s: fe_id- %llu session_type- %d be_id- %d app_type- %d acdb_dev_id- %d"
 		"sample_rate- %d copp_token- %d bit_width- %d copp_perf_mode- %d\n",
 		__func__, fe_id, session_type, be_id, cfg_data.app_type, cfg_data.acdb_dev_id,
 		cfg_data.sample_rate, cfg_data.copp_token, cfg_data.bit_width, cfg_data.copp_perf_mode);
@@ -2348,7 +2349,7 @@ static int msm_pcm_capture_app_type_cfg_ctl_put(struct snd_kcontrol *kcontrol,
 		cfg_data.bit_width = ucontrol->value.integer.value[5];
 	if (ucontrol->value.integer.value[6] != 0)
 		cfg_data.copp_perf_mode = ucontrol->value.integer.value[6];
-	pr_debug("%s: fe_id- %llu session_type- %d be_id- %d app_type- %d acdb_dev_id- %d"
+	pr_err("%s: fe_id- %llu session_type- %d be_id- %d app_type- %d acdb_dev_id- %d"
 		"sample_rate- %d copp_token- %d bit_width- %d copp_perf_mode- %d\n",
 		__func__, fe_id, session_type, be_id, cfg_data.app_type, cfg_data.acdb_dev_id,
 		cfg_data.sample_rate, cfg_data.copp_token, cfg_data.bit_width, cfg_data.copp_perf_mode);
