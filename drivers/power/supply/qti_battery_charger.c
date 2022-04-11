@@ -298,6 +298,7 @@ enum xm_property_id {
 	XM_PROP_FG1_TREMQ,
 	XM_PROP_FG1_TFULLQ,
 	XM_PROP_SHIPMODE_COUNT_RESET,
+	XM_PROP_SPORT_MODE,
 	XM_PROP_MAX,
 };
 enum {
@@ -5111,6 +5112,43 @@ static ssize_t shipmode_count_reset_show(struct class *c,
 }
 static CLASS_ATTR_RW(shipmode_count_reset);
 
+
+static ssize_t sport_mode_store(struct class *c,
+					struct class_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
+						battery_class);
+	int rc;
+	int val;
+
+	if (kstrtoint(buf, 10, &val))
+		return -EINVAL;
+
+	rc = write_property_id(bcdev, &bcdev->psy_list[PSY_TYPE_XM],
+				XM_PROP_SPORT_MODE, val);
+	if (rc < 0)
+		return rc;
+
+	return count;
+}
+
+static ssize_t sport_mode_show(struct class *c,
+					struct class_attribute *attr, char *buf)
+{
+	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
+						battery_class);
+	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_XM];
+	int rc;
+
+	rc = read_property_id(bcdev, pst, XM_PROP_SPORT_MODE);
+	if (rc < 0)
+		return rc;
+
+	return scnprintf(buf, PAGE_SIZE, "%u\n", pst->prop[XM_PROP_SPORT_MODE]);
+}
+static CLASS_ATTR_RW(sport_mode);
+
 static struct attribute *battery_class_attrs[] = {
 	&class_attr_soh.attr,
 	&class_attr_resistance.attr,
@@ -5243,6 +5281,7 @@ static struct attribute *battery_class_attrs[] = {
 	&class_attr_fg1_tremq.attr,
 	&class_attr_fg1_tfullq.attr,
 	&class_attr_shipmode_count_reset.attr,
+	&class_attr_sport_mode.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(battery_class);
