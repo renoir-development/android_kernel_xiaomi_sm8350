@@ -258,10 +258,6 @@ enum xm_property_id {
 	XM_PROP_PD_VERIFED,
 	XM_PROP_PDO2,
 	XM_PROP_UVDM_STATE,
-
-	/* use for MI SMART INTERCHG */
-	XM_PROP_VDM_CMD_SINK_SOC,
-
 	/*****************/
 	XM_PROP_WLS_BIN,
 	XM_PROP_FASTCHGMODE,
