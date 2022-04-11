@@ -238,12 +238,14 @@ enum xm_property_id {
 	XM_PROP_BT_STATE,
 	XM_PROP_REVERSE_CHG_MODE,
 	XM_PROP_REVERSE_CHG_STATE,
+	XM_PROP_WLS_FW_STATE,
 	XM_PROP_RX_VOUT,
 	XM_PROP_RX_VRECT,
 	XM_PROP_RX_IOUT,
 	XM_PROP_TX_ADAPTER,
 	XM_PROP_OP_MODE,
 	XM_PROP_WLS_DIE_TEMP,
+	XM_PROP_WLS_TX_SPEED,
 	/**********************/
 	XM_PROP_INPUT_SUSPEND,
 	XM_PROP_REAL_TYPE,
@@ -4043,6 +4045,36 @@ out:
 }
 static CLASS_ATTR_RW(reverse_chg_mode);
 
+static ssize_t wls_tx_speed_store(struct class *c,
+					struct class_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
+						battery_class);
+	int rc;
+	int val;
+	if (kstrtoint(buf, 10, &val))
+		return -EINVAL;
+	rc = write_property_id(bcdev, &bcdev->psy_list[PSY_TYPE_XM],
+				XM_PROP_WLS_TX_SPEED, val);
+	if (rc < 0)
+		return rc;
+	return count;
+}
+static ssize_t wls_tx_speed_show(struct class *c,
+					struct class_attribute *attr, char *buf)
+{
+	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
+						battery_class);
+	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_XM];
+	int rc;
+	rc = read_property_id(bcdev, pst, XM_PROP_WLS_TX_SPEED);
+	if (rc < 0)
+		return rc;
+	return scnprintf(buf, PAGE_SIZE, "%u", pst->prop[XM_PROP_WLS_TX_SPEED]);
+}
+static CLASS_ATTR_RW(wls_tx_speed);
+
 static ssize_t reverse_chg_state_show(struct class *c,
 					struct class_attribute *attr, char *buf)
 {
@@ -4058,6 +4090,22 @@ static ssize_t reverse_chg_state_show(struct class *c,
 	return scnprintf(buf, PAGE_SIZE, "%u", pst->prop[XM_PROP_REVERSE_CHG_STATE]);
 }
 static CLASS_ATTR_RO(reverse_chg_state);
+
+static ssize_t wls_fw_state_show(struct class *c,
+					struct class_attribute *attr, char *buf)
+{
+	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
+						battery_class);
+	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_XM];
+	int rc;
+
+	rc = read_property_id(bcdev, pst, XM_PROP_WLS_FW_STATE);
+	if (rc < 0)
+		return rc;
+
+	return scnprintf(buf, PAGE_SIZE, "%u", pst->prop[XM_PROP_WLS_FW_STATE]);
+}
+static CLASS_ATTR_RO(wls_fw_state);
 
 static ssize_t rx_vout_show(struct class *c,
 					struct class_attribute *attr, char *buf)
@@ -5056,6 +5104,7 @@ static struct attribute *battery_class_attrs[] = {
 	&class_attr_bt_state.attr,
 	&class_attr_reverse_chg_mode.attr,
 	&class_attr_reverse_chg_state.attr,
+	&class_attr_wls_fw_state.attr,
 	&class_attr_wireless_chip_fw.attr,
 	&class_attr_wls_bin.attr,
 	&class_attr_rx_vout.attr,
@@ -5065,6 +5114,7 @@ static struct attribute *battery_class_attrs[] = {
 	&class_attr_op_mode.attr,
 	&class_attr_wls_die_temp.attr,
 	&class_attr_wls_power_max.attr,
+	&class_attr_wls_tx_speed.attr,
 #endif
 	/*****************************/
 	&class_attr_input_suspend.attr,
