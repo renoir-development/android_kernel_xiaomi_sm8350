@@ -223,6 +223,7 @@ enum xm_property_id {
 	XM_PROP_BQ2597X_BATTERY_VOLTAGE,
 	XM_PROP_COOL_MODE,
 #endif
+	XM_PROP_BT_TRANSFER_START,
 	XM_PROP_MASTER_SMB1396_ONLINE,
 	XM_PROP_MASTER_SMB1396_IIN,
 	XM_PROP_SLAVE_SMB1396_ONLINE,
@@ -3602,6 +3603,55 @@ static ssize_t cool_mode_show(struct class *c,
 static CLASS_ATTR_RW(cool_mode);
 #endif
 
+static ssize_t bt_transfer_start_store(struct class *c,
+					struct class_attribute *attr,
+					const char *buf, size_t count)
+{
+	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
+						battery_class);
+	int rc;
+	int val;
+
+	if (kstrtoint(buf, 10, &val))
+		return -EINVAL;
+
+	pr_err("transfer_start_store %d build: 0x%x\n", val, bcdev->hw_version_build);
+	switch (bcdev->hw_version_build){
+		case 0x110001:
+		case 0x10001:
+		case 0x120000:
+		case 0x20000:
+		case 0x120005:
+		case 0x120001:
+		case 0x20001:
+		case 0x90002:
+			rc = write_property_id(bcdev, &bcdev->psy_list[PSY_TYPE_XM],
+				XM_PROP_BT_TRANSFER_START, val);
+			break;
+		default:
+			break;
+	}
+
+	return count;
+}
+
+static ssize_t bt_transfer_start_show(struct class *c,
+					struct class_attribute *attr, char *buf)
+{
+	struct battery_chg_dev *bcdev = container_of(c, struct battery_chg_dev,
+						battery_class);
+	struct psy_state *pst = &bcdev->psy_list[PSY_TYPE_XM];
+	int rc;
+
+
+	rc = read_property_id(bcdev, pst, XM_PROP_BT_TRANSFER_START);
+	if (rc < 0)
+		return rc;
+	pr_err("transfer_start_show %d\n", pst->prop[XM_PROP_BT_TRANSFER_START]);
+	return scnprintf(buf, PAGE_SIZE, "%u\n", pst->prop[XM_PROP_BT_TRANSFER_START]);
+}
+static CLASS_ATTR_RW(bt_transfer_start);
+
 static ssize_t master_smb1396_online_show(struct class *c,
 					struct class_attribute *attr, char *buf)
 {
@@ -4989,6 +5039,7 @@ static struct attribute *battery_class_attrs[] = {
 	&class_attr_bq2597x_battery_voltage.attr,
 	&class_attr_cool_mode.attr,
 #endif
+	&class_attr_bt_transfer_start.attr,
 	&class_attr_master_smb1396_online.attr,
 	&class_attr_master_smb1396_iin.attr,
 	&class_attr_slave_smb1396_online.attr,
