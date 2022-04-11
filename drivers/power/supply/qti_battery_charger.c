@@ -88,6 +88,7 @@ enum uvdm_state {
 	USBPD_UVDM_AUTHENTICATION,
 	USBPD_UVDM_VERIFIED,
 	USBPD_UVDM_REMOVE_COMPENSATION,
+	USBPD_UVDM_REVERSE_AUTHEN,
 	USBPD_UVDM_CONNECT,
 };
 
@@ -258,6 +259,7 @@ enum xm_property_id {
 	XM_PROP_VDM_CMD_AUTHENTICATION,
 	XM_PROP_VDM_CMD_VERIFIED,
 	XM_PROP_VDM_CMD_REMOVE_COMPENSATION,
+	XM_PROP_VDM_CMD_REVERSE_AUTHEN,
 	XM_PROP_CURRENT_STATE,
 	XM_PROP_ADAPTER_ID,
 	XM_PROP_ADAPTER_SVID,
@@ -4374,6 +4376,12 @@ static void usbpd_request_vdm_cmd(struct battery_chg_dev *bcdev, enum uvdm_state
 		val = *data;
 		pr_err("AUTHENTICATION:data = %d\n", val);
 		break;
+	case USBPD_UVDM_REVERSE_AUTHEN:
+		prop_id = XM_PROP_VDM_CMD_REVERSE_AUTHEN;
+		usbpd_sha256_bitswap32(data, USBPD_UVDM_SS_LEN);
+		val = *data;
+		pr_err("AUTHENTICATION:data = %d\n", val);
+		break;
 	case USBPD_UVDM_REMOVE_COMPENSATION:
 		prop_id = XM_PROP_VDM_CMD_REMOVE_COMPENSATION;
 		val = *data;
@@ -4388,7 +4396,8 @@ static void usbpd_request_vdm_cmd(struct battery_chg_dev *bcdev, enum uvdm_state
 		break;
 	}
 
-	if(cmd == USBPD_UVDM_SESSION_SEED || cmd == USBPD_UVDM_AUTHENTICATION) {
+	if(cmd == USBPD_UVDM_SESSION_SEED || cmd == USBPD_UVDM_AUTHENTICATION
+		|| cmd == USBPD_UVDM_REVERSE_AUTHEN) {
 		rc = write_ss_auth_prop_id(bcdev, &bcdev->psy_list[PSY_TYPE_XM],
 				prop_id, data);
 	}
@@ -4455,6 +4464,7 @@ static ssize_t request_vdm_cmd_show(struct class *c,
 	  case USBPD_UVDM_SESSION_SEED:
 	  case USBPD_UVDM_VERIFIED:
 	  case USBPD_UVDM_REMOVE_COMPENSATION:
+	  case USBPD_UVDM_REVERSE_AUTHEN:
 	  	return snprintf(buf, PAGE_SIZE, "%d,Null", cmd);
 	  	break;
 	  case USBPD_UVDM_AUTHENTICATION:
