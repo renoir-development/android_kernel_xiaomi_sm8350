@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2020, The Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #include <linux/delay.h>
@@ -61,8 +60,8 @@ static struct nvmem_cell *nvmem_cell;
 static int download_mode = 1;
 static struct kobject dload_kobj;
 
-static int in_panic = 0;
-static int dload_type = SCM_DLOAD_BOTHDUMPS;
+static int in_panic;
+static int dload_type = SCM_DLOAD_FULLDUMP;
 static void *dload_mode_addr;
 static bool dload_mode_enabled;
 static void *emergency_dload_mode_addr;
@@ -432,10 +431,7 @@ static void msm_restart_prepare(const char *cmd)
 	else
 		qpnp_pon_system_pwr_off(PON_POWER_OFF_HARD_RESET);
 
-	if (in_panic) {
-		reason = PON_RESTART_REASON_PANIC;
-	}
-	else if (cmd != NULL) {
+	if (cmd != NULL) {
 		if (!strncmp(cmd, "bootloader", 10)) {
 			reason = PON_RESTART_REASON_BOOTLOADER;
 			__raw_writel(0x77665500, restart_reason);
@@ -465,19 +461,15 @@ static void msm_restart_prepare(const char *cmd)
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
 		} else {
-			reason = PON_RESTART_REASON_NORMAL;
 			__raw_writel(0x77665501, restart_reason);
 		}
 
-	} else {
-		reason = PON_RESTART_REASON_NORMAL;
-		__raw_writel(0x77665501, restart_reason);
+		if (reason && nvmem_cell)
+			nvmem_cell_write(nvmem_cell, &reason, sizeof(reason));
+		else
+			qpnp_pon_set_restart_reason(
+				(enum pon_restart_reason)reason);
 	}
-	if (reason && nvmem_cell)
-		nvmem_cell_write(nvmem_cell, &reason, sizeof(reason));
-	else
-		qpnp_pon_set_restart_reason(
-			(enum pon_restart_reason)reason);
 
 	/*outer_flush_all is not supported by 64bit kernel*/
 #ifndef CONFIG_ARM64
