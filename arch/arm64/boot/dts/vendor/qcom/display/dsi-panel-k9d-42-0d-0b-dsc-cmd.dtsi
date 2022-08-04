@@ -318,7 +318,7 @@
 };
 
 &dsi_k9d_42_0d_0b_dsc_cmd {
-	mi,panel-id = "", "K9D", "B\r";
+	mi,panel-id = <0x4b3944 0x420d00>;
 	mi,hbm-51-ctl-flag;
 	mi,hbm-off-51-index = <1>;
 	mi,hbm-on-51-index = <1>;
@@ -333,7 +333,7 @@
 
 	qcom,mdss-dsi-display-timings {
 		timing@0 {
-			mi,mdss-dsc-panel-id = "", "K9D", "B\r";
+			mi,mdss-dsc-panel-id = <0x4b3944 0x420d00>;
 
 			mi,mdss-dsi-dimmingon-command = [
 				15 01 00 00 00 00 02 53 28
@@ -368,7 +368,7 @@
 		};
 
 		timing@1 {
-			mi,mdss-dsc-panel-id = "", "K9D", "B\r";
+			mi,mdss-dsc-panel-id = <0x4b3944 0x420d00>;
 
 			mi,mdss-dsi-dimmingon-command = [
 				15 01 00 00 00 00 02 53 28
