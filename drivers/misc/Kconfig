@@ -524,6 +524,12 @@ config HISI_HIKEY_USB
 	help
 	  If you say yes here you get support for usb functionality of HiSilicon Hikey Platform.
 
+config MI_HARDWARE_ID
+	tristate "Register xiaomi hwid module"
+	default n
+	help
+	  This adds support for mi hwid.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
@@ -539,4 +545,5 @@ source "drivers/misc/cxl/Kconfig"
 source "drivers/misc/ocxl/Kconfig"
 source "drivers/misc/cardreader/Kconfig"
 source "drivers/misc/habanalabs/Kconfig"
+source "drivers/misc/al6021/Kconfig"
 endmenu
