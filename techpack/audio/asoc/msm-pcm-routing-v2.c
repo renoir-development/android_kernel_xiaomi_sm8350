@@ -6323,24 +6323,24 @@ static int get_ec_ref_port_id(int value, int *index)
 		*index = 43;
 		port_id = AFE_PORT_ID_PRIMARY_TDM_TX;
 		break;
+	case 43:
+		*index = 43;
+		port_id = AFE_PORT_ID_QUINARY_MI2S_RX;
+		break;
 	case 44:
 		*index = 44;
-		port_id = AFE_PORT_ID_QUINARY_MI2S_RX;
+		port_id = RT_PROXY_PORT_001_TX;
 		break;
 	case 45:
 		*index = 45;
-		port_id = RT_PROXY_PORT_001_TX;
+		port_id = AFE_PORT_ID_PRIMARY_TDM_RX_2;
 		break;
 	case 46:
 		*index = 46;
-		port_id = AFE_PORT_ID_PRIMARY_TDM_RX_2;
+		port_id = AFE_PORT_ID_TERTIARY_TDM_RX;
 		break;
 	case 47:
 		*index = 47;
-		port_id = AFE_PORT_ID_TERTIARY_TDM_RX;
-		break;
-	case 48:
-		*index = 48;
 		port_id = AFE_PORT_ID_SECONDARY_TDM_TX_1;
 		break;
 	default:
