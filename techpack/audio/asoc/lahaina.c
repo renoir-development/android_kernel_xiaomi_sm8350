@@ -6501,7 +6501,6 @@ static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 		.ignore_pmdown_time = 1,
 		SND_SOC_DAILINK_REG(sec_mi2s_tx_hostless),
 	},
-#if defined(CONFIG_TARGET_PRODUCT_ODIN) || defined(CONFIG_TARGET_PRODUCT_LISA)
 	/* DISP PORT Hostless */
 	{/* hw:x,45 */
 		.name = "DISPLAY_PORT_RX_HOSTLESS",
@@ -6515,7 +6514,6 @@ static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 		.ignore_pmdown_time = 1,
 		SND_SOC_DAILINK_REG(display_port_hostless),
 	},
-#endif
 };
 
 static struct snd_soc_dai_link msm_common_ultrasound_dai_links[] = {

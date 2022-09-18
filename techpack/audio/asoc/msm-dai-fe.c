@@ -780,7 +780,6 @@ static struct snd_soc_dai_driver msm_fe_dais[] = {
 		.name = "HDMI_HOSTLESS",
 		.probe = fe_dai_probe,
 	},
-#if defined(CONFIG_TARGET_PRODUCT_ODIN) || defined(CONFIG_TARGET_PRODUCT_LISA)
 	{
 		.playback = {
 			.stream_name = "DISPLAY_PORT_HOSTLESS Playback",
@@ -797,7 +796,6 @@ static struct snd_soc_dai_driver msm_fe_dais[] = {
 		.name = "DISPLAY_PORT_HOSTLESS",
 		.probe = fe_dai_probe,
 	},
-#endif
 	{
 		.playback = {
 			.stream_name = "AUXPCM_HOSTLESS Playback",

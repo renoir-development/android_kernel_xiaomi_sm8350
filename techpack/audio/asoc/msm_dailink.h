@@ -83,12 +83,10 @@ SND_SOC_DAILINK_DEFS(hdmi_rx_hostless,
 	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
 
-#if defined(CONFIG_TARGET_PRODUCT_ODIN) || defined(CONFIG_TARGET_PRODUCT_LISA)
 SND_SOC_DAILINK_DEFS(display_port_hostless,
 	DAILINK_COMP_ARRAY(COMP_CPU("DISPLAY_PORT_HOSTLESS")),
 	DAILINK_COMP_ARRAY(COMP_CODEC("snd-soc-dummy", "snd-soc-dummy-dai")),
 	DAILINK_COMP_ARRAY(COMP_PLATFORM("msm-pcm-hostless")));
-#endif
 
 SND_SOC_DAILINK_DEFS(voicemmode2,
 	DAILINK_COMP_ARRAY(COMP_CPU("VoiceMMode2")),
