@@ -6489,7 +6489,6 @@ static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 		.id = MSM_FRONTEND_DAI_MULTIMEDIA10,
 		SND_SOC_DAILINK_REG(multimedia10),
 	},
-#if defined(CONFIG_TARGET_PRODUCT_ODIN) || defined(CONFIG_TARGET_PRODUCT_LISA)
 	{/* hw:x,44 */
 		.name = "Secondary MI2S_TX Hostless",
 		.stream_name = "Secondary MI2S_TX Hostless Capture",
@@ -6502,6 +6501,7 @@ static struct snd_soc_dai_link msm_common_misc_fe_dai_links[] = {
 		.ignore_pmdown_time = 1,
 		SND_SOC_DAILINK_REG(sec_mi2s_tx_hostless),
 	},
+#if defined(CONFIG_TARGET_PRODUCT_ODIN) || defined(CONFIG_TARGET_PRODUCT_LISA)
 	/* DISP PORT Hostless */
 	{/* hw:x,45 */
 		.name = "DISPLAY_PORT_RX_HOSTLESS",
