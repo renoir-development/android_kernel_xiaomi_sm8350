@@ -137,7 +137,6 @@
 #define HAP_CFG_AUTORES_CFG_REG			0x63
 #define AUTORES_EN_BIT				BIT(7)
 #define AUTORES_EN_DLY_MASK			GENMASK(5, 2)
-#define AUTORES_EN_DLY_6_CYCLE			0xc
 #define AUTORES_EN_DLY(cycles)			((cycles) * 2)
 #define AUTORES_EN_DLY_6_CYCLES			AUTORES_EN_DLY(6)
 #define AUTORES_EN_DLY_SHIFT			2
@@ -1119,39 +1118,6 @@ static int haptics_get_closeloop_lra_period_v2(
 		tmp = div_u64(tmp, tlra_ol);
 		tmp = div_u64(tmp, 586);
 		config->rc_clk_cal_count = div_u64(tmp, config->t_lra_us);
-#ifdef QCOM_HAPTIC_F0_PROTECT
-		//protect low rate of xbl f0 abnormal for k9 only
-		if (in_boot) {
-			u32  xbl_f0 = USEC_PER_SEC / config->cl_t_lra_us;
-			dev_err(chip->dev, "xbl f0  =%d \n", xbl_f0);
-			rc1 = of_property_read_u32(node, "qcom,lra-f0-min", &f0_mix);
-			if (rc1 < 0) {
-				dev_err(chip->dev, "lra-f0-min failed, rc=%d\n", rc);
-			}
-			rc2 = of_property_read_u32(node, "qcom,lra-f0-max", &f0_max);
-			if (rc2 < 0) {
-				dev_err(chip->dev, "lra-f0-max failed, rc=%d\n", rc);
-			}
-			rc3 = of_property_read_u32(node, "qcom,lra-f0-default", &f0_default);
-			if (rc3 < 0) {
-				dev_err(chip->dev, "lra-f0-default failed, rc=%d\n", rc);
-			}
-			rc4 = of_property_read_u32(node, "qcom,lra-f0-cal-count", &f0_cnt);
-			if (rc4 < 0) {
-				dev_err(chip->dev, "lra-f0-cal-count failed, rc=%d\n", rc);
-			}
-			if (rc1 >= 0 && rc2 >= 0 && rc3 >= 0 && rc4 >= 0) {
-				if (xbl_f0 > f0_max || xbl_f0 < f0_mix) {
-					dev_err(chip->dev, "xbl f0 abnormal: %d ~ 0x%x use default: %d ~ 0x%x f0:%d - %d after boot\n",
-							xbl_f0, config->rc_clk_cal_count, f0_default, f0_cnt, f0_mix, f0_max);
-					config->cl_t_lra_us = USEC_PER_SEC /f0_default;
-					config->rc_clk_cal_count = f0_cnt;
-				}
-			} else {
-				dev_err(chip->dev, "lra-f0: default min max count must set together in dtsi\n");
-			}
-		}
-#endif
 	} else if (rc_clk_cal == CAL_RC_CLK_AUTO_VAL && auto_res_done) {
 		/*
 		 * CAL_TLRA_CL_STS_W_CAL = CAL_TLRA_CL_STS;
@@ -1202,6 +1168,39 @@ static int haptics_get_closeloop_lra_period_v2(
 		tmp = div_u64(tmp, last_good_tlra_cl_sts);
 		tmp = div_u64(tmp, 293);
 		config->rc_clk_cal_count = div_u64(tmp, config->t_lra_us);
+#ifdef QCOM_HAPTIC_F0_PROTECT
+		//protect low rate of xbl f0 abnormal for k9 only
+		if(in_boot){
+			u32  xbl_f0 = USEC_PER_SEC / config->cl_t_lra_us;
+			dev_err(chip->dev, "xbl f0  =%d \n", xbl_f0);
+			rc1 = of_property_read_u32(node, "qcom,lra-f0-min", &f0_mix);
+			if (rc1 < 0) {
+				dev_err(chip->dev, "lra-f0-min failed, rc=%d\n", rc);
+			}
+			rc2 = of_property_read_u32(node, "qcom,lra-f0-max", &f0_max);
+			if (rc2 < 0) {
+				dev_err(chip->dev, "lra-f0-max failed, rc=%d\n", rc);
+			}
+			rc3 = of_property_read_u32(node, "qcom,lra-f0-default", &f0_default);
+			if (rc3 < 0) {
+				dev_err(chip->dev, "lra-f0-default failed, rc=%d\n", rc);
+			}
+			rc4 = of_property_read_u32(node, "qcom,lra-f0-cal-count", &f0_cnt);
+			if (rc4 < 0) {
+				dev_err(chip->dev, "lra-f0-cal-count failed, rc=%d\n", rc);
+			}
+			if (rc1 >= 0 && rc2 >= 0 && rc3 >= 0 && rc4 >= 0) {
+				if (xbl_f0 > f0_max || xbl_f0 < f0_mix) {
+					dev_err(chip->dev, "xbl f0 abnormal: %d ~ 0x%x use default: %d ~ 0x%x f0:%d - %d after boot\n",
+							xbl_f0, config->rc_clk_cal_count, f0_default, f0_cnt, f0_mix, f0_max);
+					config->cl_t_lra_us = USEC_PER_SEC /f0_default;
+					config->rc_clk_cal_count = f0_cnt;
+				}
+			} else {
+				dev_err(chip->dev, "lra-f0: default min max count must set together in dtsi\n");
+			}
+		}
+#endif
 	} else {
 		dev_err(chip->dev, "Can't get close-loop LRA period in rc_clk_cal mode %u\n",
 				rc_clk_cal);
@@ -1523,6 +1522,7 @@ static int haptics_open_loop_drive_config(struct haptics_chip *chip, bool en)
 		if (rc < 0)
 			return rc;
 #endif
+
 		/* Toggle RC_CLK_CAL_EN if it's in auto mode */
 		rc = haptics_read(chip, chip->cfg_addr_base,
 				HAP_CFG_CAL_EN_REG, &val, 1);
@@ -2335,8 +2335,10 @@ static int haptics_load_custom_effect(struct haptics_chip *chip,
 	 * is computed by 0x7fff - 0x3fff
 	 */
 	play->vmax_mv = (magnitude - 0x3fff) * chip->custom_effect->vmax_mv / 0x4000;
-
 	rc = haptics_set_vmax_mv(chip, play->vmax_mv);
+
+	/* Toggle HAPTICS_EN for a clear start point of FIFO playing */
+	rc = haptics_toggle_module_enable(chip);
 	if (rc < 0)
 		goto cleanup;
 
