@@ -279,7 +279,7 @@ ifneq (,$(filter $(TARGET_PRODUCT), cetus))
 	obj-y	+= cs35l45/
 endif
 
-ifneq (,$(filter $(TARGET_PRODUCT), renoir))
+ifneq (,$(filter $(TARGET_PRODUCT), renoir lisa))
 	obj-y	+= tfa98xx/
 endif
 

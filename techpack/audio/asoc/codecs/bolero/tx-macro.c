@@ -1170,6 +1170,8 @@ static int tx_macro_enable_dec(struct snd_soc_dapm_widget *w,
 		 * 6ms delay is required as per HW spec
 		 */
 		usleep_range(6000, 6010);
+		snd_soc_component_update_bits(component,
+				hpf_gate_reg, 0x02, 0x00);
 		/* apply gain after decimator is enabled */
 		reg_val = snd_soc_component_read32(component, tx_gain_ctl_reg);
 		dev_info(component->dev, "%s: the reg(%#x) value before enable dec is: %#x \n",

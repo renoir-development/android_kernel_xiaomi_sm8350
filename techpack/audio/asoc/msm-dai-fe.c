@@ -577,6 +577,8 @@ static struct snd_soc_dai_driver msm_fe_dais[] = {
 			.aif_name = "RX1_CDC_DMA_DL_US",
 #elif defined (CONFIG_TARGET_PRODUCT_RENOIR)
 			.aif_name = "TERT_MI2S_DL_HL",
+#elif defined(CONFIG_TARGET_PRODUCT_LISA)
+			.aif_name = "PRI_TDM_RX_1_DL_US",
 #else
 			.aif_name = "TERT_TDM_RX_1_DL_US",
 #endif
