@@ -286,6 +286,8 @@ struct fts_ts_data {
 	struct notifier_block power_supply_notifier;
 	int clicktouch_count;
 	int clicktouch_num;
+	u8 fps_cmd;
+	u8 fps_state;
 };
 
 enum GESTURE_MODE_TYPE {
