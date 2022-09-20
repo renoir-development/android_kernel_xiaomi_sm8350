@@ -81,6 +81,7 @@ struct ini_data {
 	"RawDataTest_Min", "RawDataTest_Max", \
 	"RawDataTest_VKey_Check", "RawDataTest_Min_VKey", "RawDataTest_Max_VKey", \
 	"LCD_NoiseTest_Frame", "LCD_NoiseTest_Coefficient", "LCD_NoiseTest_Coefficient_key", \
+	"OpenTest_DifferMin", \
 }
 
 
@@ -91,6 +92,7 @@ struct ini_data {
 	"SCAP_RAWDATA_TEST", \
 	"WEAK_SHORT_CIRCUIT_TEST", \
 	"PANEL_DIFFER_TEST", \
+	"NOISE_TEST", \
 }
 
 #define BASIC_THRESHOLD_MC_SC       { \

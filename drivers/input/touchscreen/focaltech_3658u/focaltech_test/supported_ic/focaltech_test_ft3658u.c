@@ -264,6 +264,56 @@ static int short_test_ch_to_ch(
 	return 0;
 }
 
+
+/*
+ * start_scan - start to scan a frame
+ */
+int ft5652_start_scan(int frame_num)
+{
+	int ret = 0;
+	u8 addr = 0;
+	u8 val = 0;
+	u8 finish_val = 0;
+	int times = 0;
+	struct fts_test *tdata = fts_ftest;
+
+	if ((NULL == tdata) || (NULL == tdata->func)) {
+		FTS_TEST_SAVE_ERR("test/func is null\n");
+		return -EINVAL;
+	}
+
+	addr = DEVIDE_MODE_ADDR;
+	val = 0xC0;
+	finish_val = 0x40;
+
+	/* write register to start scan */
+	ret = fts_test_write_reg(addr, val);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("write start scan mode fail\n");
+		return ret;
+	}
+
+	sys_delay(frame_num * FACTORY_TEST_DELAY / 2);
+	/* Wait for the scan to complete */
+	while (times++ < 100) {
+		sys_delay(FACTORY_TEST_DELAY);
+
+		ret = fts_test_read_reg(addr, &val);
+		if ((ret >= 0) && (val == finish_val)) {
+			break;
+		} else
+			FTS_TEST_DBG("reg%x=%x,retry:%d", addr, val, times);
+	}
+
+	if (times >= 100) {
+		FTS_TEST_SAVE_ERR("scan timeout\n");
+		return -EIO;
+	}
+
+	return 0;
+}
+
+
 static int ft5652_rawdata_test(struct fts_test *tdata, bool *test_result)
 {
 	int ret = 0;
@@ -366,7 +416,7 @@ restore_reg:
 
 	ret = fts_test_write_reg(FACTORY_REG_DATA_TYPE, data_type);
 	if (ret < 0) {
-		FTS_TEST_SAVE_ERR("restore 0x5B fail,ret=%d\n", ret);
+		FTS_TEST_SAVE_ERR("set raw type fail,ret=%d\n", ret);
 	}
 
 	ret = fts_test_write_reg(FACTORY_REG_DATA_SELECT, data_sel);
@@ -587,7 +637,7 @@ restore_reg:
 
 	ret = fts_test_write_reg(FACTORY_REG_DATA_TYPE, data_type);
 	if (ret < 0) {
-		FTS_TEST_SAVE_ERR("restore 0x5B fail,ret=%d\n", ret);
+		FTS_TEST_SAVE_ERR("set raw type fail,ret=%d\n", ret);
 	}
 
 	ret = fts_test_write_reg(FACTORY_REG_FRE_LIST, fre);
@@ -805,10 +855,21 @@ static int ft5652_scap_cb_test(struct fts_test *tdata, bool *test_result)
 	}
 
 restore_reg:
+	ret = fts_test_write_reg(FACTORY_REG_WC_SEL, wc_sel);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("restore water_channel_sel fail,ret=%d\n", ret);
+	}
+
 	ret = fts_test_write_reg(FACTORY_REG_MC_SC_MODE, sc_mode);/* set the origin value */
 	if (ret) {
-		FTS_TEST_SAVE_ERR("write sc mode fail,ret=%d\n", ret);
+		FTS_TEST_SAVE_ERR("restore sc mode fail,ret=%d\n", ret);
 	}
+
+	ret = fts_test_write_reg(FACTORY_REG_HC_SEL, hc_sel);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("restore high_channel_sel fail,ret=%d\n", ret);
+	}
+
 test_err:
 	if (tmp_result && tmp2_result && tmp3_result && tmp4_result) {
 		*test_result = true;
@@ -843,6 +904,7 @@ static int ft5652_scap_rawdata_test(struct fts_test *tdata, bool *test_result)
 	u8 wc_sel = 0;
 	u8 hc_sel = 0;
 	u8 hov_high = 0;
+	u8 data_type = 0;
 	struct mc_sc_threshold *thr = &tdata->ic.mc_sc.thr;
 
 	FTS_TEST_FUNC_ENTER();
@@ -893,11 +955,29 @@ static int ft5652_scap_rawdata_test(struct fts_test *tdata, bool *test_result)
 		goto test_err;
 	}
 
+	ret = fts_test_read_reg(FACTORY_REG_DATA_TYPE, &data_type);
+	if (ret) {
+		FTS_TEST_SAVE_ERR("read 0x5B fail,ret=%d\n", ret);
+		goto test_err;
+	}
+
+	ret = fts_test_write_reg(FACTORY_REG_DATA_TYPE, 0x01);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("set raw type fail,ret=%d\n", ret);
+		goto restore_reg;
+	}
+
 	/* scan rawdata */
 	ret = start_scan();
 	if (ret < 0) {
 		FTS_TEST_SAVE_ERR("scan scap rawdata fail\n");
-		goto test_err;
+		goto restore_reg;
+	}
+
+	ret = start_scan();
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("scan scap rawdata(2) fail\n");
+		goto restore_reg;
 	}
 
 	/* water proof on check */
@@ -907,7 +987,7 @@ static int ft5652_scap_rawdata_test(struct fts_test *tdata, bool *test_result)
 		ret = get_rawdata_mc_sc(WATER_PROOF_ON, srawdata_tmp);
 		if (ret < 0) {
 			FTS_TEST_SAVE_ERR("get scap(WP_ON) rawdata fail\n");
-			goto test_err;
+			goto restore_reg;
 		}
 
 		FTS_TEST_SAVE_INFO("scap_rawdata in waterproof on mode:\n");
@@ -932,7 +1012,7 @@ static int ft5652_scap_rawdata_test(struct fts_test *tdata, bool *test_result)
 		ret = get_rawdata_mc_sc(WATER_PROOF_OFF, srawdata_tmp);
 		if (ret < 0) {
 			FTS_TEST_SAVE_ERR("get scap(WP_OFF) rawdata fail\n");
-			goto test_err;
+			goto restore_reg;
 		}
 
 		FTS_TEST_SAVE_INFO("scap_rawdata in waterproof off mode:\n");
@@ -957,7 +1037,7 @@ static int ft5652_scap_rawdata_test(struct fts_test *tdata, bool *test_result)
 		ret = get_rawdata_mc_sc(HIGH_SENSITIVITY, srawdata_tmp);
 		if (ret < 0) {
 			FTS_TEST_SAVE_ERR("get scap(HS) rawdata fail\n");
-			goto test_err;
+			goto restore_reg;
 		}
 
 		FTS_TEST_SAVE_INFO("scap_rawdata in hs mode:\n");
@@ -982,7 +1062,7 @@ static int ft5652_scap_rawdata_test(struct fts_test *tdata, bool *test_result)
 		ret = get_rawdata_mc_sc(HOV, srawdata_tmp);
 		if (ret < 0) {
 			FTS_TEST_SAVE_ERR("get scap(HOV) rawdata fail\n");
-			goto test_err;
+			goto restore_reg;
 		}
 
 		FTS_TEST_SAVE_INFO("scap_rawdata in hov mode:\n");
@@ -1004,6 +1084,22 @@ static int ft5652_scap_rawdata_test(struct fts_test *tdata, bool *test_result)
 		srawdata_cnt += tdata->sc_node.node_num;
 	} else {
 		tmp4_result = true;
+	}
+
+restore_reg:
+	ret = fts_test_write_reg(FACTORY_REG_WC_SEL, wc_sel);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("restore water_channel_sel fail,ret=%d\n", ret);
+	}
+
+	ret = fts_test_write_reg(FACTORY_REG_HC_SEL, hc_sel);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("restore high_channel_sel fail,ret=%d\n", ret);
+	}
+
+	ret = fts_test_write_reg(FACTORY_REG_DATA_TYPE, data_type);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("set raw type fail,ret=%d\n", ret);
 	}
 
 test_err:
@@ -1211,7 +1307,7 @@ static int ft5652_panel_differ_test(struct fts_test *tdata, bool *test_result)
 
 	ret = fts_test_write_reg(FACTORY_REG_DATA_SELECT, 0x00);
 	if (ret < 0) {
-		FTS_TEST_SAVE_ERR("set data select fail,ret=%d\n", ret);
+		FTS_TEST_SAVE_ERR("set data sel fail,ret=%d\n", ret);
 		goto restore_reg;
 	}
 
@@ -1251,7 +1347,7 @@ restore_reg:
 
 	ret = fts_test_write_reg(FACTORY_REG_DATA_TYPE, data_type);
 	if (ret < 0) {
-		FTS_TEST_SAVE_ERR("restore 0x5B fail,ret=%d\n", ret);
+		FTS_TEST_SAVE_ERR("set raw type fail,ret=%d\n", ret);
 	}
 
 	ret = fts_test_write_reg(FACTORY_REG_FIR, fir);
@@ -1261,7 +1357,7 @@ restore_reg:
 
 	ret = fts_test_write_reg(FACTORY_REG_DATA_SELECT, data_sel);
 	if (ret < 0) {
-		FTS_TEST_SAVE_ERR("restore 0x06 fail,ret=%d\n", ret);
+		FTS_TEST_SAVE_ERR("set data sel fail,ret=%d\n", ret);
 	}
 test_err:
 	/* result */
@@ -1281,6 +1377,168 @@ test_err:
 	return ret;
 }
 
+
+static int ft5652_noise_test(struct fts_test *tdata, bool *test_result)
+{
+	int ret = 0;
+	int *noise_data = NULL;
+	u8 fre = 0;
+	u8 data_sel = 0;
+	int nose_test_max = 0;
+	u8 touch_value = 0;
+	u8 frame_h_byte = 0;
+	u8 frame_l_byte = 0;
+	bool result = false;
+	u8 noise_mode = 0;
+	int byte_num = 0;
+	struct mc_sc_threshold *thr = &tdata->ic.mc_sc.thr;
+
+	FTS_TEST_FUNC_ENTER();
+	FTS_TEST_SAVE_INFO("\n============ Test Item: Noise test\n");
+	memset(tdata->buffer, 0, tdata->buffer_length);
+	noise_data = tdata->buffer;
+
+	if (!thr->rawdata_h_min || !thr->rawdata_h_max) {
+		FTS_TEST_SAVE_ERR("rawdata_h_min/max is null\n");
+		ret = -EINVAL;
+		goto test_err;
+	}
+
+	ret = enter_factory_mode();
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("failed to enter factory mode,ret=%d\n", ret);
+		goto test_err;
+	}
+
+	/* rawdata test in mapping mode */
+	ret = mapping_switch(MAPPING);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("switch mapping fail,ret=%d\n", ret);
+		goto test_err;
+	}
+
+	ret = fts_test_read_reg(0x0D, &touch_value);
+	if (ret) {
+		FTS_TEST_SAVE_ERR("read touch_value fail,ret=%d\n", ret);
+		goto test_err;
+	}
+	nose_test_max = touch_value * 4 * thr->basic.noise_max / 100;
+
+	ret = fts_test_read_reg(FACTORY_REG_DATA_SELECT, &data_sel);
+	if (ret) {
+		FTS_TEST_SAVE_ERR("read 0x06 error,ret=%d\n", ret);
+		goto test_err;
+	}
+
+	/* select rawdata */
+	ret = fts_test_write_reg(FACTORY_REG_DATA_SELECT, 0x01);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("set fir fail,ret=%d\n", ret);
+		goto restore_reg;
+	}
+
+	/* save origin value */
+	ret = fts_test_read_reg(FACTORY_REG_FRE_LIST, &fre);
+	if (ret) {
+		FTS_TEST_SAVE_ERR("read 0x0A fail,ret=%d\n", ret);
+		goto test_err;
+	}
+
+	/* set frequecy high */
+	ret = fts_test_write_reg(FACTORY_REG_FRE_LIST, 0x0);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("set frequecy fail,ret=%d\n", ret);
+		goto restore_reg;
+	}
+
+	ret = fts_test_write_reg(0x1A, 0x01);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("write 0x1A fail,ret=%d\n", ret);
+		goto restore_reg;
+	}
+
+	frame_h_byte = BYTE_OFF_8(thr->basic.noise_sel_frame);
+	frame_l_byte = BYTE_OFF_0(thr->basic.noise_sel_frame);
+	ret = fts_test_write_reg(0x1c, frame_h_byte);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("write 0x1c fail,ret=%d\n", ret);
+		goto restore_reg;
+	}
+
+	ret = fts_test_write_reg(0x1d, frame_l_byte);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("write 0x1d fail,ret=%d\n", ret);
+		goto restore_reg;
+	}
+
+	noise_mode = (u8)thr->basic.noise_mode;
+	FTS_TEST_INFO("noise_mode = %x\n", noise_mode);
+	ret = fts_test_write_reg(0x1b, noise_mode);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("write 0x1b fail,ret=%d\n", ret);
+		goto restore_reg;
+	}
+
+	ret = ft5652_start_scan(thr->basic.noise_sel_frame);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("ft5652_start_scan fail,ret=%d\n", ret);
+		goto restore_reg;
+	}
+
+	ret = fts_test_write_reg(0x01, 0xAA);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("write 0x01 fail,ret=%d\n", ret);
+		goto restore_reg;
+	}
+
+	byte_num = tdata->node.node_num * 2;
+	ret = read_mass_data(0xCE, byte_num, noise_data);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("read rawdata fail\n");
+		return ret;
+	}
+
+	/* show test data */
+	show_data(noise_data, false);
+
+	/* compare */
+	result = compare_data(noise_data, 0, nose_test_max, 0, 0, false);
+
+restore_reg:
+	ret = fts_test_write_reg(0x1b, 0x0);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("restore 0x1b fail,ret=%d\n", ret);
+	}
+
+	/* set the origin value */
+	ret = fts_test_write_reg(FACTORY_REG_FRE_LIST, fre);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("restore 0x0A fail,ret=%d\n", ret);
+	}
+
+	ret = fts_test_write_reg(FACTORY_REG_DATA_SELECT, data_sel);
+	if (ret < 0) {
+		FTS_TEST_SAVE_ERR("restore 0x06 fail,ret=%d\n", ret);
+	}
+
+test_err:
+	if (result) {
+		*test_result = true;
+		FTS_TEST_SAVE_INFO("------ Noise test PASS\n");
+	} else {
+		*test_result = false;
+		FTS_TEST_SAVE_INFO("------ Noise test NG\n");
+	}
+
+	/* save test data */
+	fts_test_save_data("Noise Test", CODE_M_NOISE_TEST,
+				noise_data, 0, false, false, *test_result);
+
+	FTS_TEST_FUNC_EXIT();
+	return ret;
+}
+
+
 static int start_test_ft5652(void)
 {
 	int ret = 0;
@@ -1291,6 +1549,14 @@ static int start_test_ft5652(void)
 
 	FTS_TEST_FUNC_ENTER();
 	FTS_TEST_INFO("test item:0x%x", fts_ftest->ic.mc_sc.u.tmp);
+
+	/* rawdata test */
+	if (true == test_item->noise_test) {
+		ret = ft5652_noise_test(tdata, &temp_result);
+		if ((ret < 0) || (false == temp_result)) {
+			test_result = false;
+		}
+	}
 
 	/* rawdata test */
 	if (true == test_item->rawdata_test) {
@@ -1343,6 +1609,17 @@ static int start_test_ft5652(void)
 
 	FTS_TEST_FUNC_EXIT();
 	return test_result;
+}
+
+static int param_init_ft5652(void)
+{
+	struct mc_sc_threshold *thr = &fts_ftest->ic.mc_sc.thr;
+
+	get_value_basic("NoiseTest_Max", &thr->basic.noise_max);
+	get_value_basic("NoiseTest_Frames", &thr->basic.noise_sel_frame);
+	get_value_basic("NoiseTest_FwNoiseMode", &thr->basic.noise_mode);
+
+	return 0;
 }
 
 static int ft3658_get_rawdata(bool is_raw, int *data_buffer, int byte_num)
@@ -1525,6 +1802,7 @@ struct test_funcs test_func_ft5652 = {
 	.mc_sc_short_v2 = true,
 	.raw_u16 = true,
 	.cb_high_support = true,
+	.param_init = param_init_ft5652,
 	.start_test = start_test_ft5652,
 	.open_test = ft3658_open_test,
 	.short_test = ft3658_short_test,
