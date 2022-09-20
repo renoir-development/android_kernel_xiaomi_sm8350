@@ -136,6 +136,11 @@ struct touch_event {
 	struct timespec touch_time;
 };
 
+struct last_touch_event {
+	int head;
+	struct touch_event touch_event_buf[LAST_TOUCH_EVENTS_MAX];
+};
+
 struct xiaomi_touch_pdata{
 	struct xiaomi_touch *device;
 	struct xiaomi_touch_interface *touch_data[2];
@@ -147,6 +152,8 @@ struct xiaomi_touch_pdata{
 	int prox_value;
 	bool prox_changed;
 	const char *name;
+	struct proc_dir_entry  *last_touch_events_proc;
+	struct last_touch_event *last_touch_events;
 };
 
 struct xiaomi_touch *xiaomi_touch_dev_get(int minor);
@@ -166,6 +173,8 @@ extern int copy_touch_rawdata(char *raw_base,  int len);
 extern int update_touch_rawdata(void);
 
 extern int update_clicktouch_raw(void);
+
+extern void last_touch_events_collect(int slot, int state);
 
 int xiaomi_touch_set_suspend_state(int state);
 
