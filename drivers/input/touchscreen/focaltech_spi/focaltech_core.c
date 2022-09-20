@@ -1137,7 +1137,7 @@ static int fts_power_source_init(struct fts_ts_data *ts_data)
 	int ret = 0;
 
 	FTS_FUNC_ENTER();
-	ts_data->vdd = regulator_get(ts_data->dev, "vdd");
+	ts_data->vdd = regulator_get(ts_data->dev, ts_data->pdata->vdd_supply);
 	if (IS_ERR_OR_NULL(ts_data->vdd)) {
 		ret = PTR_ERR(ts_data->vdd);
 		FTS_ERROR("get vdd regulator failed,ret=%d", ret);
@@ -1154,7 +1154,7 @@ static int fts_power_source_init(struct fts_ts_data *ts_data)
 		}
 	}
 
-	ts_data->vcc_i2c = regulator_get(ts_data->dev, "vcc_i2c");
+	ts_data->vcc_i2c = regulator_get(ts_data->dev, ts_data->pdata->vcc_i2c_supply);
 	if (!IS_ERR_OR_NULL(ts_data->vcc_i2c)) {
 		if (regulator_count_voltages(ts_data->vcc_i2c) > 0) {
 			ret = regulator_set_voltage(ts_data->vcc_i2c,
@@ -1427,6 +1427,22 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
 	if (ret < 0) {
 		FTS_ERROR("Unable to get touch expert array, please check dts");
 		return ret;
+	}
+
+	ret = of_property_read_string(np, "focaltech,vdd-supply",
+						&pdata->vdd_supply);
+	if (ret < 0) {
+		FTS_INFO("Unable to get vdd-supply, using default: %s",
+			FTS_VDD_SUPPLY_DEFAULT);
+		pdata->vdd_supply = FTS_VDD_SUPPLY_DEFAULT;
+	}
+
+	ret = of_property_read_string(np, "focaltech,vcc_i2c-supply",
+						&pdata->vcc_i2c_supply);
+	if (ret < 0) {
+		FTS_INFO("Unable to get vcc_i2c-supply, using default: %s",
+			FTS_VCC_I2C_SUPPLY_DEFAULT);
+		pdata->vcc_i2c_supply = FTS_VCC_I2C_SUPPLY_DEFAULT;
 	}
 
 	FTS_INFO("max touch number:%d, irq gpio:%d, reset gpio:%d",
