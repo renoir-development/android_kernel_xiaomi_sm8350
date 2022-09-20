@@ -419,9 +419,6 @@ void fts_release_all_finger(void)
 	for (finger_count = 0; finger_count < max_touches; finger_count++) {
 		input_mt_slot(input_dev, finger_count);
 		input_mt_report_slot_state(input_dev, MT_TOOL_FINGER, false);
-#ifdef FTS_XIAOMI_TOUCHFEATURE
-		last_touch_events_collect(finger_count, 0);
-#endif
 	}
 #else
 	input_mt_sync(input_dev);
@@ -521,9 +518,6 @@ static int fts_input_report_b(struct fts_ts_data *data)
 						  events[i].x, events[i].y,
 						  events[i].p, events[i].area);
 			}
-#ifdef FTS_XIAOMI_TOUCHFEATURE
-			last_touch_events_collect(events[i].id, 1);
-#endif
 		} else {
 			uppoint++;
 			input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, false);
@@ -531,9 +525,6 @@ static int fts_input_report_b(struct fts_ts_data *data)
 			if (data->log_level >= 1) {
 				FTS_DEBUG("[B]P%d UP!", events[i].id);
 			}
-#ifdef FTS_XIAOMI_TOUCHFEATURE
-			last_touch_events_collect(events[i].id, 0);
-#endif
 		}
 	}
 
@@ -546,9 +537,6 @@ static int fts_input_report_b(struct fts_ts_data *data)
 				va_reported = true;
 				input_mt_slot(data->input_dev, i);
 				input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, false);
-#ifdef FTS_XIAOMI_TOUCHFEATURE
-				last_touch_events_collect(i, 0);
-#endif
 			}
 		}
 	}
