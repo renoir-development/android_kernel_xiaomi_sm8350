@@ -75,8 +75,6 @@ enum MODE_TYPE {
 };
 
 struct xiaomi_touch_interface {
-	int thp_cmd_buf[MAX_BUF_SIZE];
-	int thp_cmd_size;
 	int touch_mode[Touch_Mode_NUM][VALUE_TYPE_SIZE];
 	int (*setModeValue)(int Mode, int value);
 	int (*setModeLongValue)(int Mode, int value_len, int *value);
