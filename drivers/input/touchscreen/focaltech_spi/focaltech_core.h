@@ -92,6 +92,8 @@
 #define FTS_Y_MIN_DISPLAY_DEFAULT           0
 #define FTS_X_MAX_DISPLAY_DEFAULT           720
 #define FTS_Y_MAX_DISPLAY_DEFAULT           1280
+#define FTS_VDD_SUPPLY_DEFAULT "vdd"
+#define FTS_VCC_I2C_SUPPLY_DEFAULT "vcc_i2c"
 
 #define FTS_TOUCH_DOWN                      0
 #define FTS_TOUCH_UP                        1
@@ -166,6 +168,8 @@ struct ftxxxx_proc {
 };
 
 struct fts_ts_platform_data {
+	const char *vdd_supply;
+	const char *vcc_i2c_supply;
 	u32 irq_gpio;
 	u32 irq_gpio_flags;
 	u32 reset_gpio;
