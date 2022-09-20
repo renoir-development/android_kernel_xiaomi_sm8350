@@ -105,7 +105,6 @@ Test Status
 #define FACTORY_REG_LCD_NOISE_TTHR              0x14
 #define FACTORY_REG_OPEN_START                  0x15
 #define FACTORY_REG_OPEN_STATE                  0x16
-#define FACTORY_REG_OPEN_ADDR                   0xCF
 #define FACTORY_REG_OPEN_IDLE                   0x03
 #define FACTORY_REG_OPEN_BUSY                   0x01
 #define FACTORY_REG_CB_ADDR_H                   0x18
@@ -277,7 +276,6 @@ struct mc_sc_testitem {
 	u32 scap_rawdata_test           : 1;
 	u32 short_test                  : 1;
 	u32 panel_differ_test           : 1;
-	u32 noise_test                  : 1;
 };
 
 struct mc_sc_threshold_b {
@@ -321,9 +319,6 @@ struct mc_sc_threshold_b {
 	int scap_rawdata_hov_min;
 	int scap_rawdata_hov_max;
 	int scap_rawdata_hov_check;
-	int noise_max;
-	int noise_sel_frame;
-	int noise_mode;
 };
 
 struct mc_sc_threshold {
@@ -552,7 +547,6 @@ enum csv_itemcode_mc_sc {
 	CODE_M_WEAK_SHORT_CIRCUIT_TEST = 15,
 	CODE_M_RAWDATA_UNIFORMITY_TEST = 16,
 	CODE_M_PANELDIFFER_TEST = 20,
-	CODE_M_NOISE_TEST = 14,
 };
 
 enum csv_itemcode_sc {
