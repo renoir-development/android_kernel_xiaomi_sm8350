@@ -40,10 +40,7 @@
 #include <linux/of_irq.h>
 #include <linux/times.h>
 #include <linux/time.h>
-#if defined(CONFIG_FB)
-#include <linux/notifier.h>
-#include <linux/fb.h>
-#elif defined(CONFIG_DRM)
+#if defined(CONFIG_DRM)
 #include <drm/mi_disp_notifier.h>
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 #include <linux/earlysuspend.h>
@@ -62,7 +59,7 @@
 #define INTERVAL_READ_REG                   200  /* unit:ms */
 #define TIMEOUT_READ_REG                    1000 /* unit:ms */
 #if FTS_POWER_SOURCE_CUST_EN
-#define FTS_VTG_MIN_UV                      3300000
+#define FTS_VTG_MIN_UV                      3000000
 #define FTS_VTG_MAX_UV                      3300000
 #define FTS_I2C_VTG_MIN_UV                  1800000
 #define FTS_I2C_VTG_MAX_UV                  1800000
@@ -90,9 +87,7 @@ struct fts_ts_data *fts_data;
 static int fts_ts_suspend(struct device *dev);
 static int fts_ts_resume(struct device *dev);
 #ifdef FTS_XIAOMI_TOUCHFEATURE
-static void fts_read_palm_data(u8 reg_value);
-static void fts_palm_mode_recovery(struct fts_ts_data *ts_data);
-static void fts_game_mode_recovery(struct fts_ts_data *ts_data);
+static int fts_read_palm_data(void);
 #endif
 
 /*****************************************************************************
@@ -146,12 +141,6 @@ void fts_tp_state_recovery(struct fts_ts_data *ts_data)
 	fts_ex_mode_recovery(ts_data);
 	/* recover TP gesture state 0xD0 */
 	fts_gesture_recovery(ts_data);
-#ifdef FTS_XIAOMI_TOUCHFEATURE
-	/* recover TP game mode state */
-	fts_game_mode_recovery(ts_data);
-	/* recover TP palm mode state */
-	fts_palm_mode_recovery(ts_data);
-#endif
 	FTS_FUNC_EXIT();
 }
 
@@ -225,9 +214,7 @@ void fts_hid2std(void)
 	}
 }
 
-static int fts_get_chip_types(
-	struct fts_ts_data *ts_data,
-	u8 id_h, u8 id_l, bool fw_valid)
+static int fts_get_chip_types(struct fts_ts_data *ts_data, u8 id_h, u8 id_l, bool fw_valid)
 {
 	int i = 0;
 	struct ft_chip_t ctype[] = FTS_CHIP_TYPE_MAPPING;
@@ -270,10 +257,9 @@ static int fts_read_bootid(struct fts_ts_data *ts_data, u8 *id)
 	id_cmd[1] = 0x50;
 	ret = fts_write(id_cmd, 2);
 	if (ret < 0) {
-		FTS_ERROR("Write 0x50 to F1 fail");
+		FTS_ERROR("write 0x50 to F1 fail");
 		return ret;
 	}
-
 	id_cmd[0] = FTS_CMD_START1;
 	id_cmd[1] = FTS_CMD_START2;
 	ret = fts_write(id_cmd, 2);
@@ -648,18 +634,6 @@ static int fts_input_report_a(struct fts_ts_data *data)
 }
 #endif
 
-static void fts_convert_rawdata(u8 *buf, int len)
-{
-	int i;
-	u8 temp;
-
-	for (i = 0; i < len; i += 2) {
-		temp = *(buf + i);
-		*(buf + i) = *(buf + i + 1);
-		*(buf + i + 1) = temp;
-	}
-}
-
 static int fts_read_touchdata(struct fts_ts_data *data)
 {
 	int ret = 0;
@@ -668,26 +642,18 @@ static int fts_read_touchdata(struct fts_ts_data *data)
 	memset(buf, 0xFF, data->pnt_buf_size);
 	buf[0] = 0x01;
 
-	if (data->clicktouch_count > 0) {
-		ret = fts_read(buf, 1, buf + 1, data->pnt_buf_size - 1);
-		fts_convert_rawdata(buf + FTS_TOUCH_DATA_LEN + FTS_GESTURE_DATA_LEN + 1,
-					FTS_DIFF_DATA_LEN - 1);
-		copy_touch_rawdata(buf + FTS_TOUCH_DATA_LEN + FTS_GESTURE_DATA_LEN + 1,
-					FTS_DIFF_DATA_LEN - 1);
-		update_clicktouch_raw();
-	} else {
-		ret = fts_read(buf, 1, buf + 1, data->pnt_buf_size - 1 - FTS_DIFF_DATA_LEN);
-	}
+#ifdef FTS_XIAOMI_TOUCHFEATURE
+	if (data->palm_sensor_switch)
+		fts_read_palm_data();
+#endif
+
+	ret = fts_read(buf, 1, buf + 1, data->pnt_buf_size - 1);
 
 	if (ret < 0) {
 		FTS_ERROR("touch data(%x) abnormal,ret:%d", buf[1], ret);
 		return -EIO;
 	}
 
-#ifdef FTS_XIAOMI_TOUCHFEATURE
-	if (data->palm_sensor_switch)
-		fts_read_palm_data(buf[1]);
-#endif
 	if (data->gesture_mode) {
 		ret = fts_gesture_readdata(data, buf + FTS_TOUCH_DATA_LEN);
 		if (0 == ret) {
@@ -720,12 +686,14 @@ static int fts_read_parse_touchdata(struct fts_ts_data *data)
 	data->point_num = buf[FTS_TOUCH_POINT_NUM] & 0x0F;
 	data->touch_point = 0;
 
-	if ((data->point_num == 0x0F) && (buf[2] == 0xFF) && (buf[3] == 0xFF)
-		&& (buf[4] == 0xFF) && (buf[5] == 0xFF) && (buf[6] == 0xFF)) {
-		FTS_DEBUG("touch buff is 0xff, need recovery state");
-		fts_release_all_finger();
-		fts_tp_state_recovery(data);
-		return -EIO;
+	if (data->ic_info.is_incell) {
+		if ((data->point_num == 0x0F) && (buf[2] == 0xFF) && (buf[3] == 0xFF)
+			&& (buf[4] == 0xFF) && (buf[5] == 0xFF) && (buf[6] == 0xFF)) {
+			FTS_DEBUG("touch buff is 0xff, need recovery state");
+			fts_release_all_finger();
+			fts_tp_state_recovery(data);
+			return -EIO;
+		}
 	}
 
 	if (data->point_num > max_touch_num) {
@@ -791,16 +759,6 @@ static void fts_irq_read_report(void)
 		mutex_unlock(&ts_data->report_mutex);
 	}
 
-	if (!ts_data->touchs && ts_data->clicktouch_num) {
-		fts_write_reg(FTS_REG_DIFFDATA_EN, 0x02);
-		ts_data->clicktouch_count = ts_data->clicktouch_num;
-	} else if (ts_data->touchs && ts_data->clicktouch_count > 0) {
-		FTS_INFO("%s: update touch data: %d\n", __func__, ts_data->clicktouch_count);
-		ts_data->clicktouch_count--;
-	} else if (ts_data->touchs && ts_data->clicktouch_count == 0) {
-		fts_write_reg(FTS_REG_DIFFDATA_EN, 0x00);
-		ts_data->clicktouch_count--;
-	}
 #if FTS_ESDCHECK_EN
 	fts_esdcheck_set_intr(0);
 #endif
@@ -995,7 +953,7 @@ static int fts_report_buffer_init(struct fts_ts_data *ts_data)
 	int events_num = 0;
 
 	point_num = FTS_MAX_POINTS_SUPPORT;
-	ts_data->pnt_buf_size = FTS_TOUCH_DATA_LEN + FTS_GESTURE_DATA_LEN + FTS_DIFF_DATA_LEN;
+	ts_data->pnt_buf_size = FTS_TOUCH_DATA_LEN + FTS_GESTURE_DATA_LEN;
 
 	ts_data->point_buf = (u8 *)kzalloc(ts_data->pnt_buf_size + 1, GFP_KERNEL);
 	if (!ts_data->point_buf) {
@@ -1048,8 +1006,11 @@ static int fts_pinctrl_init(struct fts_ts_data *ts)
 	if (IS_ERR_OR_NULL(ts->pins_release)) {
 		FTS_ERROR("Pin state[release] not found");
 		ret = PTR_ERR(ts->pins_release);
+		goto err_pinctrl_lookup;
 	}
 
+
+	FTS_INFO("look all pinctrl state done");
 	return 0;
 err_pinctrl_lookup:
 	if (ts->pinctrl) {
@@ -1125,19 +1086,17 @@ static int fts_power_source_ctrl(struct fts_ts_data *ts_data, int enable)
 			FTS_DEBUG("regulator enable !");
 			gpio_direction_output(ts_data->pdata->reset_gpio, 0);
 			msleep(1);
+			ret = regulator_enable(ts_data->vdd);
+			if (ret) {
+				FTS_ERROR("enable vdd regulator failed,ret=%d", ret);
+			}
+
 			if (!IS_ERR_OR_NULL(ts_data->vcc_i2c)) {
 				ret = regulator_enable(ts_data->vcc_i2c);
 				if (ret) {
 					FTS_ERROR("enable vcc_i2c regulator failed,ret=%d", ret);
 				}
 			}
-			msleep(1);
-
-			ret = regulator_enable(ts_data->vdd);
-			if (ret) {
-				FTS_ERROR("enable vdd regulator failed,ret=%d", ret);
-			}
-
 			ts_data->power_disabled = false;
 		}
 	} else {
@@ -1209,6 +1168,7 @@ static int fts_power_source_init(struct fts_ts_data *ts_data)
 	}
 
 #if FTS_PINCTRL_EN
+	FTS_DEBUG("pinctrl start init");
 	fts_pinctrl_init(ts_data);
 	fts_pinctrl_select_normal(ts_data);
 #endif
@@ -1250,14 +1210,14 @@ static int fts_power_source_suspend(struct fts_ts_data *ts_data)
 {
 	int ret = 0;
 
+#if FTS_PINCTRL_EN
+	fts_pinctrl_select_suspend(ts_data);
+#endif
+
 	ret = fts_power_source_ctrl(ts_data, DISABLE);
 	if (ret < 0) {
 		FTS_ERROR("power off fail, ret=%d", ret);
 	}
-
-#if FTS_PINCTRL_EN
-	fts_pinctrl_select_suspend(ts_data);
-#endif
 
 	return ret;
 }
@@ -1307,7 +1267,7 @@ static int fts_gpio_configure(struct fts_ts_data *data)
 			goto err_irq_gpio_dir;
 		}
 
-		ret = gpio_direction_output(data->pdata->reset_gpio, 0);
+		ret = gpio_direction_output(data->pdata->reset_gpio, 1);
 		if (ret) {
 			FTS_ERROR("[GPIO]set_direction for reset gpio failed");
 			goto err_reset_gpio_dir;
@@ -1484,57 +1444,59 @@ static void fts_resume_work(struct work_struct *work)
 	fts_ts_resume(ts_data->dev);
 }
 
-#if defined(CONFIG_FB)
-static int fb_notifier_callback(struct notifier_block *self,
-								unsigned long event, void *data)
+#define CHANGE_FPS	  0xF628
+/*return 1 means notify was handled by this function*/
+static int check_fps(unsigned long event, void *data)
 {
-	struct fb_event *evdata = data;
-	int *blank = NULL;
-	struct fts_ts_data *ts_data = container_of(self, struct fts_ts_data,
-								  fb_notif);
+	bool legally = true;
+	int fps = *(int *)data;
+	u8 cmd;
+	bool suspend = fts_data->suspended;
 
-	if (!evdata) {
-		FTS_ERROR("evdata is null");
+	if (CHANGE_FPS == event) {
+		switch (fps) {
+			case 60:
+				cmd = 0x3c;
+			break;
+			case 90:
+				cmd = 0x5a;
+			break;
+			case 120:
+				cmd = 0x78;
+			break;
+			case 144:
+				cmd = 0x90;
+			break;
+			default :
+				legally = false;
+				FTS_ERROR("fps value illegal, fps:%d", fps);
+			break;
+		}
+
+		if (legally) {
+			FTS_INFO("config touch work with %d fps", fps);
+			if (suspend) {
+				FTS_INFO("tp in suspend status now, config is put-off to resume");
+				fts_data->fps_cmd = cmd;
+            } else {
+				if (!fts_write_reg(0x8a, cmd))
+					FTS_INFO("config fps successful");
+				fts_data->fps_cmd = 0;
+            }
+		}
+		return 1;
+	} else {
 		return 0;
 	}
-
-	if (!(event == FB_EARLY_EVENT_BLANK || event == FB_EVENT_BLANK)) {
-		FTS_INFO("event(%lu) do not need process\n", event);
-		return 0;
-	}
-
-	blank = evdata->data;
-	FTS_INFO("FB event:%lu,blank:%d", event, *blank);
-	switch (*blank) {
-	case FB_BLANK_UNBLANK:
-		if (FB_EARLY_EVENT_BLANK == event) {
-			FTS_INFO("resume: event = %lu, not care\n", event);
-		} else if (FB_EVENT_BLANK == event) {
-			queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
-		}
-		break;
-	case FB_BLANK_POWERDOWN:
-		if (FB_EARLY_EVENT_BLANK == event) {
-			cancel_work_sync(&fts_data->resume_work);
-			fts_ts_suspend(ts_data->dev);
-		} else if (FB_EVENT_BLANK == event) {
-			FTS_INFO("suspend: event = %lu, not care\n", event);
-		}
-		break;
-	default:
-		FTS_INFO("FB BLANK(%d) do not need process\n", *blank);
-		break;
-	}
-
-	return 0;
 }
-#elif defined(CONFIG_DRM)
+
+#if defined(CONFIG_DRM)
 static int drm_notifier_callback(struct notifier_block *self,
 		unsigned long event, void *data)
 {
 	struct fts_ts_data *ts_data = container_of(self, struct fts_ts_data,
 					fb_notif);
-	struct mi_disp_notifier *evdata = data;
+	struct mi_disp_notifier *evdata = (struct mi_disp_notifier *)data;
 	int blank;
 
 	if (!ts_data || !evdata || !evdata->data) {
@@ -1546,6 +1508,8 @@ static int drm_notifier_callback(struct notifier_block *self,
 		FTS_INFO("not primary display\n");
 		return NOTIFY_OK;
 	}
+	if (check_fps(60, evdata->data))
+		return 0;
 
 	blank = *(int *)(evdata->data);
 	FTS_INFO("DRM event:%lu, blank:%d", event, blank);
@@ -1590,13 +1554,7 @@ static void fts_ts_late_resume(struct early_suspend *handler)
 
 static void tpdbg_shutdown(struct fts_ts_data *ts_data, bool enable)
 {
-	if (enable) {
-		ts_data->poweroff_on_sleep = true;
-		cancel_work_sync(&fts_data->resume_work);
-		fts_ts_suspend(&ts_data->client->dev);
-	} else {
-		fts_ts_resume(&ts_data->client->dev);
-	}
+	fts_power_source_ctrl(ts_data, enable);
 }
 
 static void tpdbg_suspend(struct fts_ts_data *ts_data, bool enable)
@@ -1698,38 +1656,47 @@ static int fts_power_supply_event(struct notifier_block *nb,
 	return 0;
 }
 
+enum {
+	CHARGER_ON = 1,
+	CHARGER_OFF = 2,
+}tp_charger_state;
+
 static void fts_power_supply_work(struct work_struct *work)
 {
 	int ret = 0;
-	bool charger_mode;
 	struct fts_ts_data *ts_data =
 		container_of(work, struct fts_ts_data, power_supply_work);
+	union power_supply_propval cur_chgr = {0,};
 
-	if (ts_data == NULL)
-		return;
-#if defined(CONFIG_PM) && FTS_PATCH_COMERR_PM
-	if (ts_data->pm_suspend) {
-		FTS_ERROR("TP is in suspend mode, don't set usb status!");
+	if (!ts_data->battery_psy) {
+		FTS_ERROR("battery psy is NULL, something error!!");
 		return;
 	}
-#endif
-	pm_stay_awake(ts_data->dev);
-#ifdef CONFIG_QGKI_SYSTEM
-	charger_mode = !!power_supply_is_system_supplied();
-#else
-	charger_mode = false;
-#endif
-	if (charger_mode == ts_data->charger_mode)
-		goto out;
-	ret = fts_write_reg(FTS_REG_CHARGER_MODE_EN, charger_mode);
+	ret = power_supply_get_property(ts_data->battery_psy, POWER_SUPPLY_PROP_STATUS, &cur_chgr);
 	if (ret < 0) {
-		FTS_ERROR("failed to set power supply status:%d", charger_mode);
-	} else {
-		ts_data->charger_mode = charger_mode;
-		FTS_INFO("succes to set power supply status:%d", charger_mode);
+		FTS_ERROR("get psy property failed!!, skip charger mode handler");
+		return;
 	}
-out:
-	pm_relax(ts_data->dev);
+
+	switch (cur_chgr.intval) {
+	case CHARGER_ON:
+		if (!ts_data->charger_mode) {
+			ret = fts_charger_mode_set(true);
+			ts_data->charger_mode = true;
+			FTS_INFO("enter charger mode,ret=%d", ret);
+		}
+		break;
+	case CHARGER_OFF:
+	   if (ts_data->charger_mode) {
+			ret = fts_charger_mode_set(false);
+			ts_data->charger_mode = false;
+			FTS_INFO("exit charger mode,ret=%d", ret);
+		}
+		break;
+	default :
+		FTS_ERROR("unsupport charger state %d", cur_chgr.intval);
+		break;
+	}
 }
 
 #ifdef FTS_XIAOMI_TOUCHFEATURE
@@ -1858,16 +1825,6 @@ static void fts_update_gesture_state(struct fts_ts_data *ts_data, int bit, bool 
 	mutex_unlock(&ts_data->input_dev->mutex);
 }
 
-static void fts_power_status_handler(struct fts_ts_data *ts_data, int value)
-{
-	if (value) {
-		queue_work(ts_data->ts_workqueue, &ts_data->resume_work);
-	} else {
-		cancel_work_sync(&ts_data->resume_work);
-		fts_ts_suspend(ts_data->dev);
-	}
-}
-
 static int fts_set_cur_value(int mode, int value)
 {
 	int temp_value;
@@ -1883,10 +1840,6 @@ static int fts_set_cur_value(int mode, int value)
 	}
 	if (mode == Touch_Aod_Enable && value >= 0) {
 		fts_update_gesture_state(fts_data, GESTURE_AOD, value != 0 ? true : false);
-		return 0;
-	}
-	if (mode == Touch_Power_Status && value >= 0) {
-		fts_power_status_handler(fts_data, value);
 		return 0;
 	}
 	/* orientation for IC:
@@ -1981,25 +1934,26 @@ static int fts_get_mode_all(int mode, int *value)
 	return 0;
 }
 
-static void fts_game_mode_recovery(struct fts_ts_data *ts_data)
+static int fts_read_palm_data(void)
 {
-	xiaomi_touch_interfaces.touch_mode[Touch_Panel_Orientation][GET_CUR_VALUE] =
-		xiaomi_touch_interfaces.touch_mode[Touch_Panel_Orientation][GET_DEF_VALUE];
+	int ret = 0;
+	u8 reg_value;
 
-	xiaomi_touch_interfaces.touch_mode[Touch_Edge_Filter][GET_CUR_VALUE] =
-		xiaomi_touch_interfaces.touch_mode[Touch_Edge_Filter][GET_DEF_VALUE];
+	if (fts_data == NULL)
+		return -EINVAL;
 
-	fts_update_gamemode_data(ts_data);
-}
-
-static void fts_read_palm_data(u8 reg_value)
-{
+	ret = fts_read_reg(FTS_PALM_DATA, &reg_value);
+	if (ret < 0) {
+		FTS_ERROR("read palm data error\n");
+		return -EINVAL;
+	}
 	if (reg_value == 0x40)
 		update_palm_sensor_value(1);
 	else if (reg_value == 0x80)
 		update_palm_sensor_value(0);
 	if (reg_value == 0x40 || reg_value == 0x80)
 		FTS_INFO("update palm data:0x%02X", reg_value);
+	return 0;
 }
 
 static int fts_palm_sensor_cmd(int value)
@@ -2032,27 +1986,6 @@ static int fts_palm_sensor_write(int value)
 	if (ret < 0)
 		FTS_ERROR("set palm sensor cmd failed: %d\n", value);
 	return ret;
-}
-
-static void fts_palm_mode_recovery(struct fts_ts_data *ts_data)
-{
-	int ret = 0;
-
-	ret = fts_palm_sensor_cmd(ts_data->palm_sensor_switch);
-	if (ret < 0)
-		FTS_ERROR("set palm sensor cmd failed: %d\n", ts_data->palm_sensor_switch);
-}
-
-static int fts_enable_click_touch_raw(int count)
-{
-	FTS_INFO("%s: need %d frames of touch data\n", __func__, count);
-	if (!fts_data)
-		return -1;
-	fts_data->clicktouch_count = count;
-	fts_data->clicktouch_num = count;
-	fts_write_reg(FTS_REG_DIFFDATA_EN, 0x02);
-
-	return 0;
 }
 
 static u8 fts_panel_vendor_read(void)
@@ -2240,7 +2173,6 @@ static void fts_init_xiaomi_touchfeature(struct fts_ts_data *ts_data)
 	xiaomi_touch_interfaces.panel_display_read = fts_panel_display_read;
 	xiaomi_touch_interfaces.touch_vendor_read = fts_touch_vendor_read;
 	xiaomi_touch_interfaces.palm_sensor_write = fts_palm_sensor_write;
-	xiaomi_touch_interfaces.enable_clicktouch_raw = fts_enable_click_touch_raw;
 	xiaomi_touch_interfaces.enable_touch_raw = fts_enable_touch_raw;
 	/*xiaomi_touch_interfaces.enable_touch_delta = fts_enable_touch_delta;*/
 	xiaomi_touch_interfaces.get_touch_rx_num = fts_get_rx_num;
@@ -2403,13 +2335,7 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 	ts_data->pm_suspend = false;
 #endif
 
-#if defined(CONFIG_FB)
-	ts_data->fb_notif.notifier_call = fb_notifier_callback;
-	ret = fb_register_client(&ts_data->fb_notif);
-	if (ret) {
-		FTS_ERROR("[FB]Unable to register fb_notifier: %d", ret);
-	}
-#elif defined(CONFIG_DRM)
+#if  defined(CONFIG_DRM)
 	ts_data->fb_notif.notifier_call = drm_notifier_callback;
 	ret = mi_disp_register_client(&ts_data->fb_notif);
 	if (ret) {
@@ -2422,9 +2348,18 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 	register_early_suspend(&ts_data->early_suspend);
 #endif
 	INIT_WORK(&ts_data->power_supply_work, fts_power_supply_work);
-	ts_data->power_supply_notifier.notifier_call = fts_power_supply_event;
-	power_supply_reg_notifier(&ts_data->power_supply_notifier);
-
+	ts_data->battery_psy = power_supply_get_by_name("battery");
+	if (!ts_data->battery_psy) {
+		mdelay(50);
+		ts_data->battery_psy = power_supply_get_by_name("battery");
+	}
+	if (!ts_data->battery_psy) {
+		FTS_ERROR("get battery psy failed, don't register callback for charger mode");
+	} else {
+		ts_data->power_supply_notifier.notifier_call = fts_power_supply_event;
+		power_supply_reg_notifier(&ts_data->power_supply_notifier);
+		FTS_INFO("register callback for charger mode successful");
+	}
 #ifdef FTS_XIAOMI_TOUCHFEATURE
 	fts_init_xiaomi_touchfeature(ts_data);
 #endif
@@ -2494,10 +2429,7 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
 	if (ts_data->ts_workqueue)
 		destroy_workqueue(ts_data->ts_workqueue);
 
-#if defined(CONFIG_FB)
-	if (fb_unregister_client(&ts_data->fb_notif))
-		FTS_ERROR("[FB]Error occurred while unregistering fb_notifier.");
-#elif defined(CONFIG_DRM)
+#if defined(CONFIG_DRM)
 	if (mi_disp_unregister_client(&ts_data->fb_notif))
 		FTS_ERROR("[DRM]Error occurred while unregistering fb_notifier.\n");
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
@@ -2630,10 +2562,12 @@ static int fts_ts_resume(struct device *dev)
 	}
 	if (ts_data->enable_touch_raw)
 		fts_write(&cmd, 1);
-	if (ts_data->clicktouch_num)
-		fts_write_reg(FTS_REG_DIFFDATA_EN, 0x02);
-	else
-		fts_write_reg(FTS_REG_DIFFDATA_EN, 0x00);
+
+	if (ts_data->fps_cmd) {
+		if (!fts_write_reg(0x8a, ts_data->fps_cmd))
+			FTS_INFO("config fps successful");
+	}
+
 	ts_data->poweroff_on_sleep = false;
 	ts_data->suspended = false;
 	xiaomi_touch_set_suspend_state(0);
@@ -2678,7 +2612,7 @@ static int fts_ts_probe(struct spi_device *spi)
 
 	FTS_INFO("Touch Screen(SPI BUS) driver prboe...");
 	spi->mode = SPI_MODE_0;
-	spi->max_speed_hz = 12000000;
+	spi->max_speed_hz = 5000000;
 	spi->bits_per_word = 8;
 	ret = spi_setup(spi);
 	if (ret) {
@@ -2760,7 +2694,7 @@ static void __exit fts_ts_exit(void)
 	spi_unregister_driver(&fts_ts_driver);
 }
 
-module_init(fts_ts_init);
+late_initcall(fts_ts_init);
 module_exit(fts_ts_exit);
 
 MODULE_AUTHOR("FocalTech Driver Team");

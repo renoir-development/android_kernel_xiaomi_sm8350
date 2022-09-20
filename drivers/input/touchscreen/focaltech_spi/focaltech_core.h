@@ -130,8 +130,6 @@
 #define HT_CMD_GET_FRAME                   0x3A
 #define EXPERT_ARRAY_SIZE          3
 
-#define FTS_DIFF_DATA_LEN          HT_HAL_NODE_NUM * 2 + 1
-
 struct tp_raw {
 	uint16_t frm_idx;
 	uint16_t scan_freq;
@@ -160,8 +158,6 @@ struct ftxxxx_proc {
 	struct proc_dir_entry *proc_entry;
 	struct proc_dir_entry *tp_lockdown_info_proc;
 	struct proc_dir_entry *tp_fw_version_proc;
-	struct proc_dir_entry *tp_test_data_proc;
-	struct proc_dir_entry *tp_test_result_proc;
 	struct proc_dir_entry *tp_selftest_proc;
 	struct proc_dir_entry *tp_data_dump_proc;
 	u8 opmode;
@@ -265,6 +261,7 @@ struct fts_ts_data {
 	struct pinctrl_state *pins_active;
 	struct pinctrl_state *pins_suspend;
 	struct pinctrl_state *pins_release;
+	struct pinctrl_state *pins_spimode;
 #endif
 #if defined(CONFIG_FB) || defined(CONFIG_DRM)
 	struct notifier_block fb_notif;
@@ -280,8 +277,8 @@ struct fts_ts_data {
 	int palm_sensor_switch;
 	struct work_struct power_supply_work;
 	struct notifier_block power_supply_notifier;
-	int clicktouch_count;
-	int clicktouch_num;
+	struct power_supply *battery_psy;
+	u8 fps_cmd;
 };
 
 enum GESTURE_MODE_TYPE {
@@ -307,6 +304,7 @@ int fts_read(u8 *cmd, u32 cmdlen, u8 *data, u32 datalen);
 int fts_read_reg(u8 addr, u8 *value);
 int fts_write(u8 *writebuf, u32 writelen);
 int fts_write_reg(u8 addr, u8 value);
+int fts_spi_transfer_direct(u8 *writebuf, u32 writelen, u8 *readbuf, u32 readlen);
 int fts_spi_transfer(u8 *tx_buf, u8 *rx_buf, u32 len);
 int rdata_check(u8 *rdata, u32 rlen);
 
@@ -372,4 +370,7 @@ int fts_ex_mode_recovery(struct fts_ts_data *ts_data);
 
 void fts_irq_disable(void);
 void fts_irq_enable(void);
+
+int fts_charger_mode_set(u8 value);
+
 #endif /* __LINUX_FOCALTECH_CORE_H__ */
