@@ -41,11 +41,11 @@
 #include <linux/times.h>
 #include <linux/time.h>
 
-#if defined(CONFIG_DRM)
-#include <drm/mi_disp_notifier.h>
-#elif defined(CONFIG_FB)
+#if defined(CONFIG_FB)
 #include <linux/notifier.h>
 #include <linux/fb.h>
+#elif defined(CONFIG_DRM)
+#include <drm/mi_disp_notifier.h>
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 #include <linux/earlysuspend.h>
 #define FTS_SUSPEND_LEVEL 1     /* Early-suspend level */
@@ -1400,7 +1400,7 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
 				strlen(name_tmp),
 				sizeof(pdata->avdd_name));
 	}
-	
+
 	memset(pdata->iovdd_name, 0, sizeof(pdata->iovdd_name));
 	ret = of_property_read_string(np, "goodix,iovdd-name", &name_tmp);
 	if (!ret) {
@@ -1413,7 +1413,7 @@ static int fts_parse_dt(struct device *dev, struct fts_ts_platform_data *pdata)
 				strlen(name_tmp),
 				sizeof(pdata->iovdd_name));
 	}
-	
+
 
 	FTS_INFO("max touch number:%d, irq gpio:%d, reset gpio:%d",
 			 pdata->max_touch_number, pdata->irq_gpio, pdata->reset_gpio);
@@ -1475,50 +1475,7 @@ static int check_fps(unsigned long event, void *data)
 	}
 }
 
-#if defined(CONFIG_DRM)
-static int drm_notifier_callback(struct notifier_block *self,
-		unsigned long event, void *data)
-{
-	struct fts_ts_data *ts_data = container_of(self, struct fts_ts_data,
-					fb_notif);
-	struct mi_disp_notifier *evdata = data;
-	int blank;
-
-	if (check_fps(event, evdata->data))
-	return 0;
-
-	if (!ts_data || !evdata || !evdata->data) {
-		FTS_ERROR("evdata is null");
-		goto exit;
-	}
-
-	if (evdata->disp_id != MI_DISPLAY_PRIMARY) {
-		FTS_INFO("not primary display\n");
-		return NOTIFY_OK;
-	}
-
-	blank = *(int *)(evdata->data);
-	FTS_INFO("notifier tp event:%d, code:%d\n", event, blank);
-
-	if (event == MI_DISP_DPMS_EVENT && blank == MI_DISP_DPMS_ON) {
-		FTS_INFO("FB_BLANK_UNBLANK!\n");
-		queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
-
-	} else if (event == MI_DISP_DPMS_EARLY_EVENT &&
-			(blank == MI_DISP_DPMS_POWERDOWN ||
-			 blank == MI_DISP_DPMS_LP1 ||
-			 blank == MI_DISP_DPMS_LP2)) {
-		FTS_INFO("FB_BLANK %s\n",
-				blank == MI_DISP_DPMS_POWERDOWN ? "POWER DOWN" : "LP");
-
-		cancel_work_sync(&fts_data->resume_work);
-		fts_ts_suspend(ts_data->dev);
-	}
-
-exit:
-	return NOTIFY_OK;
-}
-#elif defined(CONFIG_FB)
+#if defined(CONFIG_FB)
 static int fb_notifier_callback(struct notifier_block *self,
 								unsigned long event, void *data)
 {
@@ -1561,6 +1518,49 @@ static int fb_notifier_callback(struct notifier_block *self,
 	}
 
 	return 0;
+}
+#elif defined(CONFIG_DRM)
+static int drm_notifier_callback(struct notifier_block *self,
+		unsigned long event, void *data)
+{
+	struct fts_ts_data *ts_data = container_of(self, struct fts_ts_data,
+					fb_notif);
+	struct mi_disp_notifier *evdata = data;
+	int blank;
+
+	if (check_fps(event, evdata->data))
+	return 0;
+
+	if (!ts_data || !evdata || !evdata->data) {
+		FTS_ERROR("evdata is null");
+		goto exit;
+	}
+
+	if (evdata->disp_id != MI_DISPLAY_PRIMARY) {
+		FTS_INFO("not primary display\n");
+		return NOTIFY_OK;
+	}
+
+	blank = *(int *)(evdata->data);
+	FTS_INFO("notifier tp event:%d, code:%d\n", event, blank);
+
+	if (event == MI_DISP_DPMS_EVENT && blank == MI_DISP_DPMS_ON) {
+		FTS_INFO("FB_BLANK_UNBLANK!\n");
+		queue_work(fts_data->ts_workqueue, &fts_data->resume_work);
+
+	} else if (event == MI_DISP_DPMS_EARLY_EVENT &&
+			(blank == MI_DISP_DPMS_POWERDOWN ||
+			 blank == MI_DISP_DPMS_LP1 ||
+			 blank == MI_DISP_DPMS_LP2)) {
+		FTS_INFO("FB_BLANK %s\n",
+				blank == MI_DISP_DPMS_POWERDOWN ? "POWER DOWN" : "LP");
+
+		cancel_work_sync(&fts_data->resume_work);
+		fts_ts_suspend(ts_data->dev);
+	}
+
+exit:
+	return NOTIFY_OK;
 }
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 static void fts_ts_early_suspend(struct early_suspend *handler)
@@ -2129,17 +2129,17 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 	ts_data->pm_suspend = false;
 #endif
 
-#if defined(CONFIG_DRM)
-	ts_data->fb_notif.notifier_call = drm_notifier_callback;
-	ret = mi_disp_register_client(&ts_data->fb_notif);
-	if (ret) {
-		FTS_ERROR("[DRM]Unable to register fb_notifier: %d\n", ret);
-	}
-#elif defined(CONFIG_FB)
+#if defined(CONFIG_FB)
 	ts_data->fb_notif.notifier_call = fb_notifier_callback;
 	ret = fb_register_client(&ts_data->fb_notif);
 	if (ret) {
 		FTS_ERROR("[FB]Unable to register fb_notifier: %d", ret);
+	}
+#elif defined(CONFIG_DRM)
+	ts_data->fb_notif.notifier_call = drm_notifier_callback;
+	ret = mi_disp_register_client(&ts_data->fb_notif);
+	if (ret) {
+		FTS_ERROR("[DRM]Unable to register fb_notifier: %d\n", ret);
 	}
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	ts_data->early_suspend.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN + FTS_SUSPEND_LEVEL;
@@ -2219,12 +2219,12 @@ static int fts_ts_remove_entry(struct fts_ts_data *ts_data)
 	if (ts_data->ts_workqueue)
 		destroy_workqueue(ts_data->ts_workqueue);
 
-#if defined(CONFIG_DRM)
-	if (mi_disp_unregister_client(&ts_data->fb_notif))
-		FTS_ERROR("[DRM]Error occurred while unregistering fb_notifier.\n");
-#elif defined(CONFIG_FB)
+#if defined(CONFIG_FB)
 	if (fb_unregister_client(&ts_data->fb_notif))
 		FTS_ERROR("[FB]Error occurred while unregistering fb_notifier.");
+#elif defined(CONFIG_DRM)
+	if (mi_disp_unregister_client(&ts_data->fb_notif))
+		FTS_ERROR("[DRM]Error occurred while unregistering fb_notifier.\n");
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	unregister_early_suspend(&ts_data->early_suspend);
 #endif
