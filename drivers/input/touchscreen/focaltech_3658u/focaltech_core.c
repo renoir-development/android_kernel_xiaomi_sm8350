@@ -40,7 +40,6 @@
 #include <linux/of_irq.h>
 #include <linux/times.h>
 #include <linux/time.h>
-#include <linux/hwid.h>
 #if defined(CONFIG_FB)
 #include <linux/notifier.h>
 #include <linux/fb.h>
@@ -78,7 +77,6 @@
 #define DATA_CRC_EN                         0x20
 #define WRITE_CMD                           0x00
 #define READ_CMD                            (0x80 | DATA_CRC_EN)
-#define OLED_JUDGE_ID					(17+307)
 
 
 /*****************************************************************************
@@ -2637,18 +2635,6 @@ static int __init fts_ts_init(void)
 	int ret = 0;
 
 	FTS_FUNC_ENTER();
-
-	if (get_hw_version_platform() == HARDWARE_PROJECT_K9) {
-		gpio_direction_input(OLED_JUDGE_ID);
-		if (gpio_get_value(OLED_JUDGE_ID)) {
-			FTS_ERROR("TP is goodix");
-			FTS_FUNC_EXIT();
-			return 0;
-		} else {
-			FTS_ERROR("TP is focal");
-		}
-	}
-
 	ret = spi_register_driver(&fts_ts_driver);
 	if (ret != 0) {
 		FTS_ERROR("Focaltech touch screen driver init failed!");
