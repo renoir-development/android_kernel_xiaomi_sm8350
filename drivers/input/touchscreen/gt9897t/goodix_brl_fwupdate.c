@@ -17,8 +17,6 @@
   */
 #include "goodix_ts_core.h"
 
-#define TS_DEFAULT_FIRMWARE			"goodix_gt9897t_fw_k9.bin"
-
 #define BUS_TYPE_SPI					0x01
 #define BUS_TYPE_I2C					0
 
@@ -1150,7 +1148,7 @@ int goodix_fw_update_init(struct goodix_ts_core *core_data)
 	goodix_fw_update_ctrl.core_data = core_data;
 	goodix_fw_update_ctrl.mode = 0;
 
-	strlcpy(goodix_fw_update_ctrl.fw_name, TS_DEFAULT_FIRMWARE,
+	strlcpy(goodix_fw_update_ctrl.fw_name, core_data->board_data.fw_name,
 		sizeof(goodix_fw_update_ctrl.fw_name));
 
 	ret = goodix_fw_sysfs_init(core_data, &goodix_fw_update_ctrl);
