@@ -604,7 +604,6 @@ int hh_rm_console_close(hh_vmid_t vmid)
 }
 EXPORT_SYMBOL(hh_rm_console_close);
 
-#ifdef ENABLE_CONSOLE_WRITE
 /**
  * hh_rm_console_write: Write to a VM's console
  * @vmid: The vmid of the vm whose console to write to.
@@ -657,7 +656,6 @@ int hh_rm_console_write(hh_vmid_t vmid, const char *buf, size_t size)
 	return 0;
 }
 EXPORT_SYMBOL(hh_rm_console_write);
-#endif
 
 /**
  * hh_rm_console_flush: Flush a console with a VM

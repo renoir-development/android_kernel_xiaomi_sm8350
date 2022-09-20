@@ -224,11 +224,7 @@ int hh_rm_populate_hyp_res(hh_vmid_t vmid);
 /* Client APIs for VM Services */
 int hh_rm_console_open(hh_vmid_t vmid);
 int hh_rm_console_close(hh_vmid_t vmid);
-#ifdef ENABLE_CONSOLE_WRITE
 int hh_rm_console_write(hh_vmid_t vmid, const char *buf, size_t size);
-#else
-static inline hh_rm_console_write(hh_vmid_t vmid, const char *buf, size_t size) { return 0; };
-#endif
 int hh_rm_console_flush(hh_vmid_t vmid);
 int hh_rm_mem_qcom_lookup_sgl(u8 mem_type, hh_label_t label,
 			      struct hh_acl_desc *acl_desc,
