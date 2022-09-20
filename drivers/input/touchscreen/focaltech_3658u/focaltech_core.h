@@ -278,6 +278,8 @@ struct fts_ts_data {
 	struct work_struct power_supply_work;
 	struct notifier_block power_supply_notifier;
 	bool is_usb_exist;
+	u8 fps_cmd;
+	u8 fps_state;
 };
 
 enum GESTURE_MODE_TYPE {

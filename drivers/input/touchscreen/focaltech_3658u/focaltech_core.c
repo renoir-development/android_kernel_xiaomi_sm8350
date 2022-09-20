@@ -1458,6 +1458,51 @@ static void fts_resume_work(struct work_struct *work)
 	fts_ts_resume(ts_data->dev);
 }
 
+#define CHANGE_FPS	  0xF628
+/*return 1 means notify was handled by this function*/
+static int check_fps(unsigned long event, void *data)
+{
+	bool legally = true;
+	int fps = *(int *)data;
+	u8 cmd = 0;
+	bool suspend = fts_data->suspended;
+
+	if (CHANGE_FPS == event) {
+		switch (fps) {
+			case 60:
+				cmd = 0x3c;
+				break;
+			case 90:
+				cmd = 0x5a;
+				break;
+			case 120:
+				cmd = 0x78;
+				break;
+			case 144:
+				cmd = 0x90;
+				break;
+			default :
+				legally = false;
+				FTS_ERROR("fps value illegal, fps:%d", fps);
+				break;
+		}
+		if (legally) {
+			FTS_INFO("config touch work with %d fps", fps);
+			if (suspend)
+				FTS_INFO("tp in suspend status now, config is put-off to resume");
+			else {
+				if (!fts_write_reg(0x8a, cmd))
+					FTS_INFO("config fps successful");
+			}
+		}
+		fts_data->fps_state = fps;
+		fts_data->fps_cmd = cmd;
+		return 1;
+	} else {
+		return 0;
+	}
+}
+
 #if defined(CONFIG_FB)
 static int fb_notifier_callback(struct notifier_block *self,
 								unsigned long event, void *data)
@@ -1518,6 +1563,10 @@ static int drm_notifier_callback(struct notifier_block *self,
 
 	if (evdata->disp_id != MI_DISPLAY_PRIMARY) {
 		FTS_INFO("not primary display\n");
+		return NOTIFY_OK;
+	}
+
+	if (check_fps(event, evdata->data)) {
 		return NOTIFY_OK;
 	}
 
@@ -2179,6 +2228,8 @@ static int fts_ts_probe_entry(struct fts_ts_data *ts_data)
 	spin_lock_init(&ts_data->irq_lock);
 	mutex_init(&ts_data->report_mutex);
 	mutex_init(&ts_data->bus_lock);
+	ts_data->fps_state = 60;
+	ts_data->fps_cmd = 0x3c;
 
 	/* Init communication interface */
 	ret = fts_bus_init(ts_data);
@@ -2523,6 +2574,12 @@ static int fts_ts_resume(struct device *dev)
 	}
 	if (ts_data->enable_touch_raw)
 		fts_write(&cmd, 1);
+
+	if (ts_data->fps_state != 60) {
+		FTS_INFO("config touch work with %d fps", ts_data->fps_state);
+		if (!fts_write_reg(0x8a, ts_data->fps_cmd))
+			FTS_INFO("config fps successful");
+	}
 
 	ts_data->poweroff_on_sleep = false;
 	ts_data->suspended = false;
