@@ -129,13 +129,6 @@
 #define HT_HAL_SNODE_NUM                    ((HT_HAL_ROW_NUM) + (HT_HAL_COL_NUM))
 #define HT_CMD_GET_FRAME                    0x3A
 
-#define FTS_DIFF_DATA_LEN          HT_HAL_NODE_NUM * 2 + 1
-
-#define PANEL_ORIENTATION_DEGREE_0			0	/* normal portrait orientation */
-#define PANEL_ORIENTATION_DEGREE_90			1	/* anticlockwise 90 degrees */
-#define PANEL_ORIENTATION_DEGREE_180		2	/* anticlockwise 180 degrees */
-#define PANEL_ORIENTATION_DEGREE_270		3	/* anticlockwise 270 degrees */
-
 struct tp_raw {
 	uint16_t frm_idx;
 	uint16_t scan_freq;
@@ -174,6 +167,7 @@ struct ftxxxx_proc {
 };
 
 #define FOCAL_MAX_STR_LABLE_LEN		32
+
 struct fts_ts_platform_data {
 	char avdd_name[FOCAL_MAX_STR_LABLE_LEN];
 	char iovdd_name[FOCAL_MAX_STR_LABLE_LEN];
@@ -270,24 +264,20 @@ struct fts_ts_data {
 	struct pinctrl_state *pins_suspend;
 	struct pinctrl_state *pins_release;
 #endif
-#if defined(CONFIG_DRM) || defined(CONFIG_FB)
+#if defined(CONFIG_FB) || defined(CONFIG_DRM)
 	struct notifier_block fb_notif;
 #elif defined(CONFIG_HAS_EARLYSUSPEND)
 	struct early_suspend early_suspend;
 #endif
 	struct dentry *tpdbg_dentry;
 	bool poweroff_on_sleep;
+	bool gamemode_enabled;
 	u8 gesture_status;
 	struct mutex cmd_update_mutex;
 	int palm_sensor_switch;
 	struct work_struct power_supply_work;
 	struct notifier_block power_supply_notifier;
 	bool is_usb_exist;
-	int clicktouch_count;
-	int clicktouch_num;
-	bool clicktouch_enable;
-	u8 fps_cmd;
-	u8 fps_state;
 };
 
 enum GESTURE_MODE_TYPE {

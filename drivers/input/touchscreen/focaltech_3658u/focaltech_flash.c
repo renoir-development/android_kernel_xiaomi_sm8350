@@ -2077,9 +2077,7 @@ static int fts_get_lockdown_info(struct fts_ts_data *ts_data)
 
 	memset(ts_data->lockdown_info, 0x00, FTS_LOCKDOWN_INFO_SIZE);
 
-	fts_irq_disable();
 	ret = fts_flash_read(FTS_LOCKDOWN_INFO_ADDR, ts_data->lockdown_info, FTS_LOCKDOWN_INFO_SIZE);
-	fts_irq_enable();
 	if (ret < 0) {
 		FTS_ERROR("fail to get lockdown info");
 		return ret;
