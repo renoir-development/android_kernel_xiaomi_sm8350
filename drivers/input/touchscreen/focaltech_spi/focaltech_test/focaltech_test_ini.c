@@ -294,7 +294,7 @@ static int fts_test_read_ini_data(char *config_name, char *config_buf)
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 	pos = 0;
-	vfs_read(pfile, config_buf, fsize, &pos);
+	//vfs_read(pfile, config_buf, fsize, &pos);
 	filp_close(pfile, NULL);
 	set_fs(old_fs);
 
