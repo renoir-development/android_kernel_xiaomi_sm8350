@@ -50,8 +50,8 @@ And public attribution of xiaomi platforms(like K9 and so and)
 
 		goodix,avdd-name = "avdd";
 		goodix,iovdd-name = "iovdd";
-		focaltech,avdd-name = "avdd";
-		focaltech,iovdd-name = "iovdd";
+		focaltech,vdd-supply = "avdd";
+		focaltech,vcc_i2c-supply = "iovdd";
 		avdd-supply = <&L7C>;
 		iovdd-supply = <&L2C>;
 
