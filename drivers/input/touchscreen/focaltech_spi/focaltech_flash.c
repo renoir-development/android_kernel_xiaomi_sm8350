@@ -1880,6 +1880,7 @@ static int fts_fwupg_get_module_info(struct fts_upgrade *upg)
 			FTS_ERROR("get vendor id failed");
 			return ret;
 		}
+		// search for this in dmesg, insert the value in focaltech_config.h and remove hardcode below
 		FTS_INFO("module id:%04x", upg->module_id);
 		for (i = 0; i < FTS_GET_MODULE_NUM; i++) {
 			info = &module_list[i];
@@ -1894,7 +1895,10 @@ static int fts_fwupg_get_module_info(struct fts_upgrade *upg)
 		}
 	}
 
-	upg->module_info = info;
+	//upg->module_info = info;
+	// hardcode to K11 firmware until module id is configure correctly
+	upg->module_info = &module_list[1];
+
 	return 0;
 }
 
