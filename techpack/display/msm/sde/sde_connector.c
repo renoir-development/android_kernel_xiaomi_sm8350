@@ -100,7 +100,6 @@ static int sde_backlight_device_update_status(struct backlight_device *bd)
 	int rc = 0;
 	struct sde_kms *sde_kms;
 	struct sde_vm_ops *vm_ops;
-	struct dsi_display *dsi_display = NULL;
 
 	sde_kms = _sde_connector_get_kms(&c_conn->base);
 	if (!sde_kms) {
@@ -872,7 +871,7 @@ void sde_connector_fod_pre_kickoff(struct drm_connector *connector)
 		return;
 
 	if (!dsi_panel_get_fod_hbm(panel))
-		dsi_panel_set_fod_ui(panel, 0);		
+		dsi_panel_set_fod_ui(panel, 0);
 }
 
 void sde_connector_fod_post_kickoff(struct drm_connector *connector)
@@ -908,7 +907,7 @@ void sde_connector_fod_post_kickoff(struct drm_connector *connector)
 	if (fod_hbm_enabled && fod_hbm_enabled != old_fod_hbm_enabled) {
 		sde_encoder_wait_for_event(c_conn->encoder, MSM_ENC_TX_COMPLETE);
 		sde_encoder_wait_for_event(c_conn->encoder, MSM_ENC_VBLANK);
-		dsi_panel_set_fod_ui(panel, 1);		
+		dsi_panel_set_fod_ui(panel, 1);
 	}
 
 	old_fod_hbm_enabled = fod_hbm_enabled;
@@ -1010,7 +1009,7 @@ void sde_connector_helper_bridge_disable(struct drm_connector *connector)
 {
 	int rc;
 	struct sde_connector *c_conn = NULL;
-	struct dsi_display *display;
+	struct dsi_display *display = NULL;
 	bool poms_pending = false;
 	struct sde_kms *sde_kms;
 
