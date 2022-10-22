@@ -3,7 +3,6 @@
  *
  * This code is based on drivers/scsi/ufs/ufshcd.c
  * Copyright (C) 2011-2013 Samsung India Software Operations
- * Copyright (C) 2021 XiaoMi, Inc.
  * Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
  *
  * Authors:
@@ -67,9 +66,6 @@
 #define UIC_CMD_TIMEOUT	500
 #endif
 
-/*UIC PWR CTRL command timeout, unit: ms*/
-#define UIC_PWR_CTRL_TIMEOUT 3000
-
 /* NOP OUT retries waiting for NOP IN response */
 #define NOP_OUT_RETRIES    10
 /* Timeout after 30 msecs if NOP OUT hangs without response */
@@ -111,7 +107,7 @@
 #define UFSHCD_REF_CLK_GATING_WAIT_US 0xFF /* microsecs */
 
 /* Polling time to wait for fDeviceInit  */
-#define FDEVICEINIT_COMPL_TIMEOUT 8000 /* millisecs */
+#define FDEVICEINIT_COMPL_TIMEOUT 1500 /* millisecs */
 
 #define ufshcd_toggle_vreg(_dev, _vreg, _on)				\
 	({                                                              \
@@ -273,13 +269,13 @@ static int ufshcd_host_reset_and_restore(struct ufs_hba *hba);
 static void ufshcd_resume_clkscaling(struct ufs_hba *hba);
 static void ufshcd_suspend_clkscaling(struct ufs_hba *hba);
 static void __ufshcd_suspend_clkscaling(struct ufs_hba *hba);
-int ufshcd_scale_clks(struct ufs_hba *hba, bool scale_up);
+static int ufshcd_scale_clks(struct ufs_hba *hba, bool scale_up);
 #if defined(CONFIG_SCSI_UFSHCD_QTI)
 static void ufshcd_hba_vreg_set_lpm(struct ufs_hba *hba);
 static void ufshcd_hba_vreg_set_hpm(struct ufs_hba *hba);
 #endif
 static irqreturn_t ufshcd_intr(int irq, void *__hba);
-int ufshcd_change_power_mode(struct ufs_hba *hba,
+static int ufshcd_change_power_mode(struct ufs_hba *hba,
 			     struct ufs_pa_layer_attr *pwr_mode);
 static void ufshcd_schedule_eh_work(struct ufs_hba *hba);
 static int ufshcd_setup_hba_vreg(struct ufs_hba *hba, bool on);
@@ -339,13 +335,14 @@ static inline void ufshcd_wb_config(struct ufs_hba *hba)
 	ufshcd_wb_toggle_flush(hba, true);
 }
 
-void ufshcd_scsi_unblock_requests(struct ufs_hba *hba)
+
+static void ufshcd_scsi_unblock_requests(struct ufs_hba *hba)
 {
 	if (atomic_dec_and_test(&hba->scsi_block_reqs_cnt))
 		scsi_unblock_requests(hba->host);
 }
 
-void ufshcd_scsi_block_requests(struct ufs_hba *hba)
+static void ufshcd_scsi_block_requests(struct ufs_hba *hba)
 {
 	if (atomic_inc_return(&hba->scsi_block_reqs_cnt) == 1)
 		scsi_block_requests(hba->host);
@@ -1070,7 +1067,7 @@ out:
  * Returns 0 if successful
  * Returns < 0 for any other errors
  */
-int ufshcd_scale_clks(struct ufs_hba *hba, bool scale_up)
+static int ufshcd_scale_clks(struct ufs_hba *hba, bool scale_up)
 {
 	int ret = 0;
 
@@ -1124,7 +1121,7 @@ static bool ufshcd_is_devfreq_scaling_required(struct ufs_hba *hba,
 	return false;
 }
 
-int ufshcd_wait_for_doorbell_clr(struct ufs_hba *hba,
+static int ufshcd_wait_for_doorbell_clr(struct ufs_hba *hba,
 					u64 wait_timeout_us)
 {
 	unsigned long flags;
@@ -3506,7 +3503,7 @@ static inline int ufshcd_read_power_desc(struct ufs_hba *hba,
 	return ufshcd_read_desc(hba, QUERY_DESC_IDN_POWER, 0, buf, size);
 }
 
-int ufshcd_read_device_desc(struct ufs_hba *hba, u8 *buf, u32 size)
+static int ufshcd_read_device_desc(struct ufs_hba *hba, u8 *buf, u32 size)
 {
 	return ufshcd_read_desc(hba, QUERY_DESC_IDN_DEVICE, 0, buf, size);
 }
@@ -3541,10 +3538,14 @@ static inline char ufshcd_remove_non_printable(u8 ch)
 int ufshcd_get_hynix_hr(struct scsi_device *sdev, u8 *buf, u32 size)
 {
 	struct ufs_hba *hba;
+	int ret = 0;
 
 	hba = shost_priv(sdev->host);
 	size = QUERY_DESC_HEALTH_DEF_SIZE;
-	return ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0, buf, size);
+	pm_runtime_get_sync(hba->dev);
+	ret = ufshcd_read_desc(hba, QUERY_DESC_IDN_HEALTH, 0, buf, size);
+	pm_runtime_put_sync(hba->dev);
+	return ret;
 }
 
 /**
@@ -4121,7 +4122,7 @@ static int ufshcd_uic_pwr_ctrl(struct ufs_hba *hba, struct uic_command *cmd)
 
 	if (!oops_in_progress) {
 			if (!wait_for_completion_timeout(hba->uic_async_done,
-							 msecs_to_jiffies(UIC_PWR_CTRL_TIMEOUT))) {
+							 msecs_to_jiffies(UIC_CMD_TIMEOUT))) {
 				dev_err(hba->dev,
 					"pwr ctrl cmd 0x%x with mode 0x%x completion timeout\n",
 					cmd->command, cmd->argument3);
@@ -4420,7 +4421,7 @@ static int ufshcd_get_max_pwr_mode(struct ufs_hba *hba)
 	return 0;
 }
 
-int ufshcd_change_power_mode(struct ufs_hba *hba,
+static int ufshcd_change_power_mode(struct ufs_hba *hba,
 			     struct ufs_pa_layer_attr *pwr_mode)
 {
 	int ret;
@@ -6054,9 +6055,6 @@ static void ufshcd_err_handler(struct work_struct *work)
 	bool needs_reset = false;
 
 	hba = container_of(work, struct ufs_hba, eh_work);
-
-	pm_runtime_get_sync(hba->dev);
-	ufshcd_hold(hba, false);
 
 	ufs_spin_lock_irqsave(hba->host->host_lock, flags);
 	if (ufshcd_err_handling_should_stop(hba)) {
@@ -7791,6 +7789,47 @@ void ufshcd_parse_dev_ref_clk_freq(struct ufs_hba *hba, struct clk *refclk)
 		dev_err(hba->dev,
 		"invalid ref_clk setting = %ld\n", freq);
 }
+static char serial[QUERY_DESC_MAX_SIZE] = {0};
+
+char *ufs_get_serial(void)
+{
+	return serial;
+}
+
+static int ufs_init_serial(struct ufs_hba *hba)
+{
+	u8 index;
+	int ret, i;
+	int desc_len = QUERY_DESC_MAX_SIZE;
+	u8 *desc_buf;
+	desc_buf = kzalloc(QUERY_DESC_MAX_SIZE, GFP_ATOMIC);
+	if (!desc_buf)
+		return -ENOMEM;
+	ret = ufshcd_query_descriptor_retry(hba,
+		UPIU_QUERY_OPCODE_READ_DESC, QUERY_DESC_IDN_DEVICE,
+		0, 0, desc_buf, &desc_len);
+	if (ret) {
+		ret = -EINVAL;
+		goto out;
+	}
+	index = desc_buf[DEVICE_DESC_PARAM_SN];
+	kfree(desc_buf);
+	desc_buf = NULL;
+	ret = ufshcd_read_string_desc(hba, index, &desc_buf,
+					FALSE);
+	if (ret < 0)
+		goto out;
+
+	for (i = 2; i <  desc_buf[QUERY_DESC_LENGTH_OFFSET]; i += 2) {
+		snprintf(serial+i*2 - 4, QUERY_DESC_MAX_SIZE, "%02x%02x", desc_buf[i], desc_buf[i+1]);
+	}
+	pr_info("SerialNumber:%s\n", serial);
+
+
+out:
+	kfree(desc_buf);
+	return ret;
+}
 
 static int ufshcd_set_dev_ref_clk(struct ufs_hba *hba)
 {
@@ -7904,9 +7943,16 @@ out:
 static int ufshcd_probe_hba(struct ufs_hba *hba, bool async)
 {
 	int ret;
+	unsigned long flags;
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	bool reinit_needed = true;
+#endif
 	ktime_t start = ktime_get();
 
 	dev_err(hba->dev, "*** This is %s ***\n", __FILE__);
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+reinit:
+#endif
 
 	ret = ufshcd_link_startup(hba);
 	if (ret)
@@ -7942,7 +7988,36 @@ static int ufshcd_probe_hba(struct ufs_hba *hba, bool async)
 			goto out;
 	}
 
+#if defined(CONFIG_SCSI_UFSHCD_QTI)
+	/*
+	 * After reading the device descriptor, it is found as UFS 2.x
+	 * device and limit_phy_submode is set as 1 in DT file i.e
+	 * host phy is calibrated with gear4 setting, we need to
+	 * reinitialize UFS phy host with HS-Gear3, Rate B.
+	 */
+	if (hba->dev_info.wspecversion < 0x300 &&
+		hba->limit_phy_submode && reinit_needed) {
+		unsigned long flags;
+		int err;
+
+		ufshcd_vops_device_reset(hba);
+
+		/* Reset the host controller */
+		spin_lock_irqsave(hba->host->host_lock, flags);
+		ufshcd_hba_stop(hba, false);
+		spin_unlock_irqrestore(hba->host->host_lock, flags);
+
+		hba->limit_phy_submode = 0;
+		err = ufshcd_hba_enable(hba);
+		if (err)
+			goto out;
+		reinit_needed = false;
+
+		goto reinit;
+	}
+#endif
 	ufshcd_tune_unipro_params(hba);
+	ufs_init_serial(hba);
 
 	/* UFS device is also active now */
 	ufshcd_set_ufs_dev_active(hba);
@@ -7974,16 +8049,17 @@ static int ufshcd_probe_hba(struct ufs_hba *hba, bool async)
 	 */
 	ufshcd_set_active_icc_lvl(hba);
 
-	/* set the state as operational after switching to desired gear */
-	hba->ufshcd_state = UFSHCD_STATE_OPERATIONAL;
-
-#if defined(CONFIG_SCSI_UFSHCD_QTI)
 	ufshcd_wb_config(hba);
-#endif
 	/* Enable Auto-Hibernate if configured */
 	ufshcd_auto_hibern8_enable(hba);
 
 out:
+	ufs_spin_lock_irqsave(hba->host->host_lock, flags);
+	if (ret)
+		hba->ufshcd_state = UFSHCD_STATE_ERROR;
+	else if (hba->ufshcd_state == UFSHCD_STATE_RESET)
+		hba->ufshcd_state = UFSHCD_STATE_OPERATIONAL;
+	ufs_spin_unlock_irqrestore(hba->host->host_lock, flags);
 
 	trace_ufshcd_init(dev_name(hba->dev), ret,
 		ktime_to_us(ktime_sub(ktime_get(), start)),

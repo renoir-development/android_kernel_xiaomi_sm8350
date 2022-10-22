@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2020, Linux Foundation. All rights reserved.
- * Copyright (C) 2021 XiaoMi, Inc.
  */
 
 #include <linux/acpi.h>
@@ -497,6 +496,16 @@ static int ufs_qcom_phy_power_on(struct ufs_hba *hba)
 	int ret = 0;
 
 	mutex_lock(&host->phy_mutex);
+	if (hba->curr_dev_pwr_mode == UFS_POWERDOWN_PWR_MODE &&
+		hba->clk_gating.state != CLKS_ON) {
+		ret = -1;
+		dev_err(hba->dev, "%s: host shutdown %d\n",
+			__func__, ret);
+
+		mutex_unlock(&host->phy_mutex);
+
+		return ret;
+	}
 	if (!host->is_phy_pwr_on) {
 		ret = phy_power_on(phy);
 		if (ret) {
