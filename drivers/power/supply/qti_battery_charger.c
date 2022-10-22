@@ -82,7 +82,7 @@ static const unsigned int bcdev_usb_extcon_cable[] = {
 };
 
 /* Standard usb_type definitions similar to power_supply_sysfs.c */
-static const char * const power_supply_usb_type_text[] = {
+const char * const power_supply_usb_type_text[] = {
 	"Unknown", "USB", "USB_DCP", "USB_CDP", "USB_ACA", "USB_C",
 	"USB_PD", "PD_DRP", "PD_PPS", "BrickID", "USB_HVDCP",
 	"USB_HVDCP3","USB_HVDCP3P5", "USB_FLOAT"
@@ -119,7 +119,7 @@ static int battery_chg_fw_write(struct battery_chg_dev *bcdev, void *data,
 	return rc;
 }
 
-static int battery_chg_write(struct battery_chg_dev *bcdev, void *data,
+int battery_chg_write(struct battery_chg_dev *bcdev, void *data,
 				int len)
 {
 	int rc;
@@ -155,7 +155,7 @@ static int battery_chg_write(struct battery_chg_dev *bcdev, void *data,
 	return 0;
 }
 
-static int write_property_id(struct battery_chg_dev *bcdev,
+int write_property_id(struct battery_chg_dev *bcdev,
 			struct psy_state *pst, u32 prop_id, u32 val)
 {
 	struct battery_charger_req_msg req_msg = { { 0 } };
