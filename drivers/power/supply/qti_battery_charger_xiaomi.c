@@ -2956,7 +2956,7 @@ static struct attribute *xiaomi_battery_class_attrs[] = {
 	NULL,
 };
 
-static const struct attribute_group xiaomi_battery_class_group = {
+const struct attribute_group xiaomi_battery_class_group = {
 	.attrs = xiaomi_battery_class_attrs,
 };
 
